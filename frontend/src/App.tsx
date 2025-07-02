@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Layout, Menu, Typography, Space, Divider, Button, Avatar, Dropdown } from 'antd';
+import { Layout, Menu, Typography, Space, Button, Avatar, Dropdown } from 'antd';
 import { 
   DashboardOutlined, 
   RobotOutlined, 
@@ -129,7 +129,7 @@ function App() {
               </>
             )}
             {!hasPermission('backtest:basic') && (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div className="permission-error">
                 <Title level={3}>权限不足</Title>
                 <p>您没有访问回测功能的权限</p>
               </div>
@@ -140,7 +140,7 @@ function App() {
         return hasPermission('system:monitor') ? (
           <AgentDashboard />
         ) : (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
+          <div className="permission-error">
             <Title level={3}>权限不足</Title>
             <p>您没有访问Agent管理功能的权限</p>
           </div>
@@ -151,7 +151,7 @@ function App() {
         return hasPermission('portfolio:read') ? (
           <PortfolioManagement />
         ) : (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
+          <div className="permission-error">
             <Title level={3}>权限不足</Title>
             <p>您没有访问投资组合功能的权限</p>
           </div>
@@ -160,7 +160,7 @@ function App() {
         return hasPermission('system:monitor') ? (
           <SystemMonitor />
         ) : (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
+          <div className="permission-error">
             <Title level={3}>权限不足</Title>
             <p>您没有访问系统监控功能的权限</p>
           </div>
@@ -231,23 +231,15 @@ function App() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ 
-        background: '#001529',
+    <Layout style={{ minHeight: '100vh', background: '#f5f5f5' }}>
+      <Header className="app-header" style={{ 
         padding: '0 24px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between'
       }}>
-        <div style={{ 
-          color: 'white', 
-          fontSize: '20px', 
-          fontWeight: 'bold',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <BarChartOutlined style={{ fontSize: '24px' }} />
+        <div className="logo">
+          <BarChartOutlined className="logo-icon" />
           A股投资Agent分析平台
         </div>
         
@@ -268,7 +260,7 @@ function App() {
       <Layout>
         <Sider 
           width={200} 
-          style={{ background: '#fff' }}
+          className="app-sider"
           breakpoint="lg"
           collapsedWidth="0"
         >
@@ -276,26 +268,22 @@ function App() {
             mode="inline"
             selectedKeys={[selectedMenu]}
             items={menuItems}
-            style={{ height: '100%', borderRight: 0 }}
+            className="app-menu"
+            style={{ height: '100%' }}
             onSelect={({ key }) => setSelectedMenu(key as MenuKey)}
           />
         </Sider>
         
-        <Layout style={{ padding: '24px' }}>
-          <Content
-            style={{
-              padding: '24px',
-              margin: 0,
-              minHeight: 280,
-              background: '#fff',
-              borderRadius: '8px',
-            }}
-          >
-            <Title level={2} style={{ marginBottom: '24px' }}>
-              {menuItems.find(item => item.key === selectedMenu)?.label}
-            </Title>
-            <Divider style={{ margin: '0 0 24px 0' }} />
-            {renderContent()}
+        <Layout style={{ padding: '16px', background: '#f5f5f5' }}>
+          <Content className="app-content">
+            <div className="app-content-header">
+              <Title level={2} style={{ margin: 0, color: '#262626' }}>
+                {menuItems.find(item => item.key === selectedMenu)?.label}
+              </Title>
+            </div>
+            <div className="app-content-body fade-in-up">
+              {renderContent()}
+            </div>
           </Content>
         </Layout>
       </Layout>

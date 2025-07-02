@@ -61,12 +61,14 @@ const BacktestForm: React.FC<BacktestFormProps> = ({ onBacktestStart }) => {
           启动回测
         </Space>
       }
+      className="feature-card"
       style={{ marginBottom: 24 }}
     >
       <Form
         form={form}
         layout="vertical"
         onFinish={handleSubmit}
+        className="modern-form"
         initialValues={{
           initial_capital: 100000,
           num_of_news: 5,
@@ -185,7 +187,7 @@ const BacktestForm: React.FC<BacktestFormProps> = ({ onBacktestStart }) => {
             type="primary" 
             htmlType="submit" 
             loading={loading}
-            size="large"
+            className="primary-button"
             block
             icon={<PlayCircleOutlined />}
           >

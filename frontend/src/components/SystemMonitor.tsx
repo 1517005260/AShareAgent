@@ -198,21 +198,21 @@ const SystemMonitor: React.FC = () => {
                 <h3 className="text-lg font-semibold mb-4">系统总体状态</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <div className="text-center">
-                    <div className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(health.status)}`}>
+                    <div className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(health.status || 'unknown')}`}>
                       {health.status === 'healthy' ? '健康' : 
-                       health.status === 'warning' ? '警告' : '严重'}
+                       health.status === 'warning' ? '警告' : health.status === 'critical' ? '严重' : '未知'}
                     </div>
                     <div className="text-sm text-gray-600 mt-1">系统状态</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-600">
-                      {formatUptime(health.uptime)}
+                      {formatUptime(health.uptime || 0)}
                     </div>
                     <div className="text-sm text-gray-600">运行时间</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-purple-600">
-                      {health.version}
+                      {health.version || 'Unknown'}
                     </div>
                     <div className="text-sm text-gray-600">系统版本</div>
                   </div>
@@ -229,7 +229,7 @@ const SystemMonitor: React.FC = () => {
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold mb-4">服务状态</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {Object.entries(health.services).map(([service, status]) => (
+                  {Object.entries(health.services || {}).map(([service, status]) => (
                     <div key={service} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <div className="font-medium capitalize">
@@ -291,13 +291,13 @@ const SystemMonitor: React.FC = () => {
                           stroke="currentColor"
                           strokeWidth="8"
                           fill="transparent"
-                          strokeDasharray={`${metrics.cpu_usage * 2.51} 251`}
-                          className={`${metrics.cpu_usage > 80 ? 'text-red-500' : 
-                                     metrics.cpu_usage > 60 ? 'text-yellow-500' : 'text-green-500'}`}
+                          strokeDasharray={`${(metrics.cpu_usage || 0) * 2.51} 251`}
+                          className={`${(metrics.cpu_usage || 0) > 80 ? 'text-red-500' : 
+                                     (metrics.cpu_usage || 0) > 60 ? 'text-yellow-500' : 'text-green-500'}`}
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-xl font-bold">{metrics.cpu_usage.toFixed(1)}%</div>
+                        <div className="text-xl font-bold">{(metrics.cpu_usage || 0).toFixed(1)}%</div>
                       </div>
                     </div>
                     <div className="text-sm text-gray-600">CPU使用率</div>
@@ -322,13 +322,13 @@ const SystemMonitor: React.FC = () => {
                           stroke="currentColor"
                           strokeWidth="8"
                           fill="transparent"
-                          strokeDasharray={`${metrics.memory_usage * 2.51} 251`}
-                          className={`${metrics.memory_usage > 80 ? 'text-red-500' : 
-                                     metrics.memory_usage > 60 ? 'text-yellow-500' : 'text-blue-500'}`}
+                          strokeDasharray={`${(metrics.memory_usage || 0) * 2.51} 251`}
+                          className={`${(metrics.memory_usage || 0) > 80 ? 'text-red-500' : 
+                                     (metrics.memory_usage || 0) > 60 ? 'text-yellow-500' : 'text-blue-500'}`}
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-xl font-bold">{metrics.memory_usage.toFixed(1)}%</div>
+                        <div className="text-xl font-bold">{(metrics.memory_usage || 0).toFixed(1)}%</div>
                       </div>
                     </div>
                     <div className="text-sm text-gray-600">内存使用率</div>
@@ -353,13 +353,13 @@ const SystemMonitor: React.FC = () => {
                           stroke="currentColor"
                           strokeWidth="8"
                           fill="transparent"
-                          strokeDasharray={`${metrics.disk_usage * 2.51} 251`}
-                          className={`${metrics.disk_usage > 80 ? 'text-red-500' : 
-                                     metrics.disk_usage > 60 ? 'text-yellow-500' : 'text-purple-500'}`}
+                          strokeDasharray={`${(metrics.disk_usage || 0) * 2.51} 251`}
+                          className={`${(metrics.disk_usage || 0) > 80 ? 'text-red-500' : 
+                                     (metrics.disk_usage || 0) > 60 ? 'text-yellow-500' : 'text-purple-500'}`}
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-xl font-bold">{metrics.disk_usage.toFixed(1)}%</div>
+                        <div className="text-xl font-bold">{(metrics.disk_usage || 0).toFixed(1)}%</div>
                       </div>
                     </div>
                     <div className="text-sm text-gray-600">磁盘使用率</div>
@@ -373,25 +373,25 @@ const SystemMonitor: React.FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                   <div className="text-center">
                     <div className="text-3xl font-bold text-blue-600">
-                      {metrics.active_connections}
+                      {metrics.active_connections || 0}
                     </div>
                     <div className="text-sm text-gray-600">活跃连接数</div>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-green-600">
-                      {metrics.request_count_24h.toLocaleString()}
+                      {(metrics.request_count_24h || 0).toLocaleString()}
                     </div>
                     <div className="text-sm text-gray-600">24小时请求数</div>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-red-600">
-                      {metrics.error_count_24h}
+                      {metrics.error_count_24h || 0}
                     </div>
                     <div className="text-sm text-gray-600">24小时错误数</div>
                   </div>
                   <div className="text-center">
                     <div className="text-3xl font-bold text-purple-600">
-                      {metrics.average_response_time}ms
+                      {metrics.average_response_time || 0}ms
                     </div>
                     <div className="text-sm text-gray-600">平均响应时间</div>
                   </div>

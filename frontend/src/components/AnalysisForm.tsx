@@ -32,11 +32,12 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalysisStart }) => {
   };
 
   return (
-    <Card title="启动股票分析" className="mb-4">
+    <Card title="启动股票分析" className="feature-card mb-4">
       <Form
         form={form}
         layout="vertical"
         onFinish={onFinish}
+        className="modern-form"
         initialValues={{
           show_reasoning: true,
           num_of_news: 20,
@@ -87,7 +88,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalysisStart }) => {
             htmlType="submit"
             loading={loading}
             icon={<PlayCircleOutlined />}
-            size="large"
+            className="primary-button"
             block
           >
             开始分析

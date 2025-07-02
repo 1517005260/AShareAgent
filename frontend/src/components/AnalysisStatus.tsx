@@ -102,11 +102,12 @@ const AnalysisStatus: React.FC<AnalysisStatusProps> = ({ runId, onComplete }) =>
           onClick={fetchStatus}
           loading={loading}
           size="small"
+          className="secondary-button"
         >
           刷新
         </Button>
       }
-      className="mb-4"
+      className="feature-card mb-4"
     >
       {status && (
         <>

@@ -55,6 +55,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       onFinish={handleLogin}
       autoComplete="off"
       size="large"
+      className="modern-form"
     >
       <Form.Item
         name="username"
@@ -79,7 +80,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       </Form.Item>
 
       <Form.Item>
-        <Button type="primary" htmlType="submit" loading={loading} block>
+        <Button type="primary" htmlType="submit" loading={loading} className="primary-button" block>
           登录
         </Button>
       </Form.Item>
@@ -92,6 +93,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       onFinish={handleRegister}
       autoComplete="off"
       size="large"
+      className="modern-form"
     >
       <Form.Item
         name="username"
@@ -178,7 +180,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       </Form.Item>
 
       <Form.Item>
-        <Button type="primary" htmlType="submit" loading={loading} block>
+        <Button type="primary" htmlType="submit" loading={loading} className="primary-button" block>
           注册
         </Button>
       </Form.Item>
@@ -191,16 +193,19 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
       justifyContent: 'center', 
       alignItems: 'center', 
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+      background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
+      padding: '20px'
     }}>
       <Card 
+        className="feature-card"
         style={{ 
-          width: 400,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.1)'
+          width: 420,
+          maxWidth: '100%',
+          boxShadow: '0 16px 48px rgba(0,0,0,0.2)'
         }}
         title={
           <div style={{ textAlign: 'center' }}>
-            <h2 style={{ margin: 0, color: '#1890ff' }}>
+            <h2 style={{ margin: 0, color: '#1890ff', fontSize: '24px' }}>
               A股投资Agent系统
             </h2>
           </div>

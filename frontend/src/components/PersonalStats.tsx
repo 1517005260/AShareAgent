@@ -122,35 +122,35 @@ const PersonalStats: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
             <div className="bg-white rounded-lg shadow p-6 text-center">
               <div className="text-3xl font-bold text-blue-600">
-                {summary.user_stats.total_analyses}
+                {summary.user_stats?.total_analyses || 0}
               </div>
               <div className="text-sm text-gray-600 mt-1">分析次数</div>
             </div>
             
             <div className="bg-white rounded-lg shadow p-6 text-center">
               <div className="text-3xl font-bold text-green-600">
-                {summary.user_stats.total_backtests}
+                {summary.user_stats?.total_backtests || 0}
               </div>
               <div className="text-sm text-gray-600 mt-1">回测次数</div>
             </div>
             
             <div className="bg-white rounded-lg shadow p-6 text-center">
               <div className="text-3xl font-bold text-purple-600">
-                {summary.user_stats.total_portfolios}
+                {summary.user_stats?.total_portfolios || 0}
               </div>
               <div className="text-sm text-gray-600 mt-1">投资组合</div>
             </div>
             
             <div className="bg-white rounded-lg shadow p-6 text-center">
               <div className="text-3xl font-bold text-orange-600">
-                {formatPercent(summary.user_stats.success_rate)}
+                {formatPercent(summary.user_stats?.success_rate || 0)}
               </div>
               <div className="text-sm text-gray-600 mt-1">成功率</div>
             </div>
             
             <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className={`text-3xl font-bold ${getReturnColor(summary.user_stats.avg_return)}`}>
-                {formatPercent(summary.user_stats.avg_return)}
+              <div className={`text-3xl font-bold ${getReturnColor(summary.user_stats?.avg_return || 0)}`}>
+                {formatPercent(summary.user_stats?.avg_return || 0)}
               </div>
               <div className="text-sm text-gray-600 mt-1">平均收益率</div>
             </div>
@@ -162,35 +162,35 @@ const PersonalStats: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
-                  {formatCurrency(summary.performance_summary.total_invested)}
+                  {formatCurrency(summary.performance_summary?.total_invested || 0)}
                 </div>
                 <div className="text-sm text-gray-600">总投资金额</div>
               </div>
               
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {formatCurrency(summary.performance_summary.current_value)}
+                  {formatCurrency(summary.performance_summary?.current_value || 0)}
                 </div>
                 <div className="text-sm text-gray-600">当前总价值</div>
               </div>
               
               <div className="text-center">
-                <div className={`text-2xl font-bold ${getReturnColor(summary.performance_summary.profit_loss)}`}>
-                  {formatCurrency(summary.performance_summary.profit_loss)}
+                <div className={`text-2xl font-bold ${getReturnColor(summary.performance_summary?.profit_loss || 0)}`}>
+                  {formatCurrency(summary.performance_summary?.profit_loss || 0)}
                 </div>
                 <div className="text-sm text-gray-600">总盈亏</div>
               </div>
               
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {formatPercent(summary.performance_summary.best_return)}
+                  {formatPercent(summary.performance_summary?.best_return || 0)}
                 </div>
                 <div className="text-sm text-gray-600">最佳收益率</div>
               </div>
               
               <div className="text-center">
                 <div className="text-2xl font-bold text-red-600">
-                  {formatPercent(summary.performance_summary.worst_return)}
+                  {formatPercent(summary.performance_summary?.worst_return || 0)}
                 </div>
                 <div className="text-sm text-gray-600">最差收益率</div>
               </div>
@@ -205,13 +205,13 @@ const PersonalStats: React.FC = () => {
                 <h4 className="font-semibold">最近分析</h4>
               </div>
               <div className="p-4">
-                {summary.recent_activity.analyses.length === 0 ? (
+                {(summary.recent_activity?.analyses || []).length === 0 ? (
                   <div className="text-center text-gray-500 py-4">
                     暂无分析记录
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {summary.recent_activity.analyses.slice(0, 5).map((analysis, index) => (
+                    {(summary.recent_activity?.analyses || []).slice(0, 5).map((analysis, index) => (
                       <div key={index} className="flex justify-between items-center text-sm">
                         <div>
                           <div className="font-medium">{analysis.ticker || analysis.stock_code}</div>
@@ -240,13 +240,13 @@ const PersonalStats: React.FC = () => {
                 <h4 className="font-semibold">最近回测</h4>
               </div>
               <div className="p-4">
-                {summary.recent_activity.backtests.length === 0 ? (
+                {(summary.recent_activity?.backtests || []).length === 0 ? (
                   <div className="text-center text-gray-500 py-4">
                     暂无回测记录
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {summary.recent_activity.backtests.slice(0, 5).map((backtest, index) => (
+                    {(summary.recent_activity?.backtests || []).slice(0, 5).map((backtest, index) => (
                       <div key={index} className="flex justify-between items-center text-sm">
                         <div>
                           <div className="font-medium">{backtest.ticker}</div>
@@ -275,13 +275,13 @@ const PersonalStats: React.FC = () => {
                 <h4 className="font-semibold">投资组合</h4>
               </div>
               <div className="p-4">
-                {summary.recent_activity.portfolios.length === 0 ? (
+                {(summary.recent_activity?.portfolios || []).length === 0 ? (
                   <div className="text-center text-gray-500 py-4">
                     暂无投资组合
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {summary.recent_activity.portfolios.slice(0, 5).map((portfolio, index) => (
+                    {(summary.recent_activity?.portfolios || []).slice(0, 5).map((portfolio, index) => (
                       <div key={index} className="text-sm">
                         <div className="flex justify-between items-center">
                           <div className="font-medium">{portfolio.name}</div>
