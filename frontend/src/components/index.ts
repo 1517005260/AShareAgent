@@ -7,3 +7,6 @@ export { default as DecisionHistory } from './DecisionHistory';
 export { default as ReportView } from './ReportView';
 export { default as AgentDashboard } from './AgentDashboard';
 export { default as HistoryDashboard } from './HistoryDashboard';
+export { default as LoginForm } from './LoginForm';
+export { default as BacktestForm } from './BacktestForm';
+export { default as BacktestStatus } from './BacktestStatus';

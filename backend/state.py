@@ -25,6 +25,7 @@ class ApiState:
         self._current_run_id: Optional[str] = None
         self._executor = ThreadPoolExecutor(max_workers=5)
         self._analysis_tasks: Dict[str, Future] = {}  # 跟踪分析任务
+        self._backtest_tasks: Dict[str, Future] = {}  # 跟踪回测任务
 
     @property
     def current_run_id(self) -> Optional[str]:
@@ -154,6 +155,16 @@ class ApiState:
         """获取分析任务"""
         with self._lock:
             return self._analysis_tasks.get(run_id)
+
+    def register_backtest_task(self, run_id: str, future: Future):
+        """注册回测任务"""
+        with self._lock:
+            self._backtest_tasks[run_id] = future
+
+    def get_backtest_task(self, run_id: str) -> Optional[Future]:
+        """获取回测任务"""
+        with self._lock:
+            return self._backtest_tasks.get(run_id)
 
 
 # 创建全局API状态实例

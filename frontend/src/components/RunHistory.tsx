@@ -179,7 +179,7 @@ const RunHistory: React.FC = () => {
             <Descriptions.Item label="执行的Agent">
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                 {selectedRun.agents_executed?.map((agent) => (
-                  <Tag key={agent} size="small">{agent}</Tag>
+                  <Tag key={agent}>{agent}</Tag>
                 ))}
               </div>
             </Descriptions.Item>

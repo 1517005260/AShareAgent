@@ -15,7 +15,6 @@ import {
   Col
 } from 'antd';
 import {
-  EyeOutlined,
   ReloadOutlined,
   HistoryOutlined,
   SearchOutlined,
@@ -29,7 +28,7 @@ import moment from 'moment';
 
 const { Option } = Select;
 const { Search } = Input;
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 const DecisionHistory: React.FC = () => {
   const [decisions, setDecisions] = useState<AgentDecision[]>([]);

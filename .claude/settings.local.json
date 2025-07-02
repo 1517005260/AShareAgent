@@ -25,7 +25,8 @@
       "Bash(dos2unix:*)",
       "Bash(git init:*)",
       "Bash(poetry lock:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": []
   }

@@ -9,6 +9,29 @@ const api = axios.create({
   },
 });
 
+// 添加请求拦截器以自动添加认证token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// 添加响应拦截器处理认证错误
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      // 清除token并跳转到登录页
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_info');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
 // API响应接口
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -85,6 +108,91 @@ export interface AgentUpdateRequest {
   description?: string;
   status?: string;
   config?: any;
+}
+
+// 认证相关接口
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  email: string;
+  password: string;
+  full_name?: string;
+  phone?: string;
+}
+
+export interface UserInfo {
+  id: number;
+  username: string;
+  email: string;
+  full_name?: string;
+  phone?: string;
+  is_active: boolean;
+  roles: string[];
+  permissions: string[];
+  created_at: string;
+}
+
+export interface Token {
+  access_token: string;
+  token_type: string;
+  user: UserInfo;
+}
+
+// 回测相关接口
+export interface BacktestRequest {
+  ticker: string;
+  start_date: string;
+  end_date: string;
+  initial_capital?: number;
+  num_of_news?: number;
+  agent_frequencies?: Record<string, string>;
+}
+
+export interface BacktestResponse {
+  run_id: string;
+  ticker: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  message: string;
+  submitted_at: string;
+  completed_at?: string;
+}
+
+export interface BacktestStatus {
+  task_id: string;
+  ticker: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+  error_message?: string;
+  is_running?: boolean;
+  runtime_error?: string;
+}
+
+export interface BacktestResult {
+  task_id: string;
+  ticker: string;
+  start_date: string;
+  end_date: string;
+  completion_time: string;
+  result: {
+    performance_metrics: Record<string, number>;
+    risk_metrics: Record<string, number>;
+    trades: Array<Record<string, any>>;
+    portfolio_values: {
+      dates: string[];
+      values: number[];
+    };
+    benchmark_comparison?: Record<string, any>;
+  };
 }
 
 // Run接口
@@ -203,6 +311,256 @@ export class ApiService {
 
   static async getFormattedDecision(runId: string): Promise<ApiResponse<string>> {
     const response = await api.get(`/api/agents/decisions/${runId}/formatted`);
+    return response.data;
+  }
+
+  // 认证相关
+  static async login(request: LoginRequest): Promise<ApiResponse<Token>> {
+    const response = await api.post('/api/auth/login', request);
+    return response.data;
+  }
+
+  static async register(request: RegisterRequest): Promise<ApiResponse<UserInfo>> {
+    const response = await api.post('/api/auth/register', request);
+    return response.data;
+  }
+
+  static async getCurrentUser(): Promise<ApiResponse<UserInfo>> {
+    const response = await api.get('/api/auth/me');
+    return response.data;
+  }
+
+  static async logout(): Promise<void> {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('user_info');
+  }
+
+  // 回测相关
+  static async startBacktest(request: BacktestRequest): Promise<ApiResponse<BacktestResponse>> {
+    const response = await api.post('/api/backtest/start', request);
+    return response.data;
+  }
+
+  static async getBacktestStatus(runId: string): Promise<ApiResponse<BacktestStatus>> {
+    const response = await api.get(`/api/backtest/${runId}/status`);
+    return response.data;
+  }
+
+  static async getBacktestResult(runId: string): Promise<ApiResponse<BacktestResult>> {
+    const response = await api.get(`/api/backtest/${runId}/result`);
+    return response.data;
+  }
+
+  static async getBacktestHistory(params?: {
+    skip?: number;
+    limit?: number;
+    status?: string;
+    ticker?: string;
+  }): Promise<ApiResponse<{
+    tasks: BacktestStatus[];
+    total: number;
+    skip: number;
+    limit: number;
+  }>> {
+    const queryParams = new URLSearchParams();
+    if (params?.skip) queryParams.append('skip', params.skip.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.ticker) queryParams.append('ticker', params.ticker);
+    
+    const response = await api.get(`/api/backtest/history?${queryParams.toString()}`);
+    return response.data;
+  }
+
+  static async deleteBacktestTask(taskId: string): Promise<ApiResponse<boolean>> {
+    const response = await api.delete(`/api/backtest/${taskId}`);
+    return response.data;
+  }
+
+  static async getAnalysisHistory(params?: {
+    skip?: number;
+    limit?: number;
+    status?: string;
+    ticker?: string;
+  }): Promise<ApiResponse<{
+    tasks: any[];
+    total: number;
+    skip: number;
+    limit: number;
+  }>> {
+    const queryParams = new URLSearchParams();
+    if (params?.skip) queryParams.append('skip', params.skip.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.ticker) queryParams.append('ticker', params.ticker);
+    
+    const response = await api.get(`/api/analysis/history?${queryParams.toString()}`);
+    return response.data;
+  }
+
+  // 用户管理相关API
+  static async updateCurrentUser(userData: {
+    full_name?: string;
+    email?: string;
+    phone?: string;
+  }): Promise<ApiResponse<UserInfo>> {
+    const response = await api.put('/api/auth/me', userData);
+    return response.data;
+  }
+
+  static async changePassword(passwordData: {
+    current_password: string;
+    new_password: string;
+  }): Promise<ApiResponse<boolean>> {
+    const response = await api.post('/api/auth/change-password', passwordData);
+    return response.data;
+  }
+
+  static async getUserList(): Promise<ApiResponse<UserInfo[]>> {
+    const response = await api.get('/api/auth/users');
+    return response.data;
+  }
+
+  static async getUserById(userId: number): Promise<ApiResponse<UserInfo>> {
+    const response = await api.get(`/api/auth/users/${userId}`);
+    return response.data;
+  }
+
+  static async getRoles(): Promise<ApiResponse<string[]>> {
+    const response = await api.get('/api/auth/roles');
+    return response.data;
+  }
+
+  static async getPermissions(): Promise<ApiResponse<string[]>> {
+    const response = await api.get('/api/auth/permissions');
+    return response.data;
+  }
+
+  static async getUserLogs(): Promise<ApiResponse<any[]>> {
+    const response = await api.get('/api/auth/logs/me');
+    return response.data;
+  }
+
+  static async assignUserRole(userId: number, roleName: string): Promise<ApiResponse<boolean>> {
+    const response = await api.post(`/api/auth/users/${userId}/roles/${roleName}`);
+    return response.data;
+  }
+
+  static async removeUserRole(userId: number, roleName: string): Promise<ApiResponse<boolean>> {
+    const response = await api.delete(`/api/auth/users/${userId}/roles/${roleName}`);
+    return response.data;
+  }
+
+  // 投资组合管理API
+  static async createPortfolio(portfolioData: {
+    name: string;
+    description?: string;
+    initial_capital: number;
+    risk_level?: string;
+  }): Promise<ApiResponse<any>> {
+    const response = await api.post('/api/portfolios/', portfolioData);
+    return response.data;
+  }
+
+  static async getPortfolios(): Promise<ApiResponse<any[]>> {
+    const response = await api.get('/api/portfolios/');
+    return response.data;
+  }
+
+  static async getPortfolio(portfolioId: number): Promise<ApiResponse<any>> {
+    const response = await api.get(`/api/portfolios/${portfolioId}`);
+    return response.data;
+  }
+
+  static async updatePortfolio(portfolioId: number, portfolioData: {
+    name?: string;
+    description?: string;
+    risk_level?: string;
+  }): Promise<ApiResponse<any>> {
+    const response = await api.put(`/api/portfolios/${portfolioId}`, portfolioData);
+    return response.data;
+  }
+
+  static async deletePortfolio(portfolioId: number): Promise<ApiResponse<boolean>> {
+    const response = await api.delete(`/api/portfolios/${portfolioId}`);
+    return response.data;
+  }
+
+  static async getPortfolioSummary(portfolioId: number): Promise<ApiResponse<any>> {
+    const response = await api.get(`/api/portfolios/${portfolioId}/summary`);
+    return response.data;
+  }
+
+  static async getPortfolioHoldings(portfolioId: number): Promise<ApiResponse<any[]>> {
+    const response = await api.get(`/api/portfolios/${portfolioId}/holdings`);
+    return response.data;
+  }
+
+  static async addTransaction(portfolioId: number, transactionData: any): Promise<ApiResponse<any>> {
+    const response = await api.post(`/api/portfolios/${portfolioId}/transactions`, transactionData);
+    return response.data;
+  }
+
+  static async getTransactions(portfolioId: number): Promise<ApiResponse<any[]>> {
+    const response = await api.get(`/api/portfolios/${portfolioId}/transactions`);
+    return response.data;
+  }
+
+  static async getPortfolioStats(): Promise<ApiResponse<any>> {
+    const response = await api.get('/api/portfolios/stats/overview');
+    return response.data;
+  }
+
+  // 系统监控API
+  static async getSystemHealth(): Promise<ApiResponse<any>> {
+    const response = await api.get('/api/monitor/health');
+    return response.data;
+  }
+
+  static async getSystemMetrics(): Promise<ApiResponse<any>> {
+    const response = await api.get('/api/monitor/metrics');
+    return response.data;
+  }
+
+  static async getSystemLogs(): Promise<ApiResponse<any[]>> {
+    const response = await api.get('/api/monitor/logs');
+    return response.data;
+  }
+
+  static async getMonitorDashboard(): Promise<ApiResponse<any>> {
+    const response = await api.get('/api/monitor/dashboard');
+    return response.data;
+  }
+
+  // 统计API
+  static async getSystemStats(): Promise<ApiResponse<any>> {
+    const response = await api.get('/api/stats/overview');
+    return response.data;
+  }
+
+  static async getDashboardStats(): Promise<ApiResponse<any>> {
+    const response = await api.get('/api/stats/dashboard');
+    return response.data;
+  }
+
+  static async getPersonalSummary(): Promise<ApiResponse<any>> {
+    const response = await api.get('/api/stats/my/summary');
+    return response.data;
+  }
+
+  // 系统配置API
+  static async getConfigs(): Promise<ApiResponse<any[]>> {
+    const response = await api.get('/api/config/');
+    return response.data;
+  }
+
+  static async getConfigCategories(): Promise<ApiResponse<string[]>> {
+    const response = await api.get('/api/config/categories');
+    return response.data;
+  }
+
+  static async getSystemInfo(): Promise<ApiResponse<any>> {
+    const response = await api.get('/api/config/system/info');
     return response.data;
   }
 }

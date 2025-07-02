@@ -288,10 +288,28 @@ CREATE TABLE IF NOT EXISTS user_analysis_tasks (
     user_id INTEGER NOT NULL,
     task_id TEXT NOT NULL UNIQUE,             -- 任务ID
     ticker TEXT NOT NULL,                     -- 股票代码
-    task_type TEXT DEFAULT 'analysis',        -- 任务类型
+    task_type TEXT DEFAULT 'analysis',        -- 任务类型 (analysis/backtest)
     status TEXT DEFAULT 'pending',            -- 状态 (pending/running/completed/failed)
     parameters TEXT,                          -- 任务参数 (JSON格式)
     result TEXT,                              -- 分析结果 (JSON格式)
+    error_message TEXT,                       -- 错误信息
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP,                     -- 开始时间
+    completed_at TIMESTAMP,                  -- 完成时间
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 用户回测任务表
+CREATE TABLE IF NOT EXISTS user_backtest_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    task_id TEXT NOT NULL UNIQUE,             -- 任务ID
+    ticker TEXT NOT NULL,                     -- 股票代码
+    start_date TEXT NOT NULL,                 -- 回测开始日期
+    end_date TEXT NOT NULL,                   -- 回测结束日期
+    status TEXT DEFAULT 'pending',            -- 状态 (pending/running/completed/failed)
+    parameters TEXT,                          -- 回测参数 (JSON格式)
+    result TEXT,                              -- 回测结果 (JSON格式)
     error_message TEXT,                       -- 错误信息
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     started_at TIMESTAMP,                     -- 开始时间
@@ -356,6 +374,10 @@ INSERT OR IGNORE INTO permissions (name, display_name, description, resource, ac
 ('analysis:basic', '基础分析', '执行基础股票分析', 'analysis', 'execute'),
 ('analysis:advanced', '高级分析', '执行高级分析功能', 'analysis', 'execute'),
 ('analysis:history', '历史分析', '查看历史分析记录', 'analysis', 'read'),
+-- 回测功能权限
+('backtest:basic', '基础回测', '执行基础回测功能', 'backtest', 'execute'),
+('backtest:advanced', '高级回测', '执行高级回测功能', 'backtest', 'execute'),
+('backtest:history', '回测历史', '查看回测历史记录', 'backtest', 'read'),
 -- 组合管理权限
 ('portfolio:create', '创建组合', '创建投资组合', 'portfolio', 'create'),
 ('portfolio:read', '查看组合', '查看投资组合', 'portfolio', 'read'),
@@ -375,6 +397,7 @@ INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r, permissions p 
 WHERE r.name = 'premium_user' AND p.name IN (
     'analysis:basic', 'analysis:advanced', 'analysis:history',
+    'backtest:basic', 'backtest:advanced', 'backtest:history',
     'portfolio:create', 'portfolio:read', 'portfolio:update', 'portfolio:delete'
 );
 
@@ -382,6 +405,7 @@ INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
 SELECT r.id, p.id FROM roles r, permissions p 
 WHERE r.name = 'regular_user' AND p.name IN (
     'analysis:basic', 'analysis:history',
+    'backtest:basic', 'backtest:history',
     'portfolio:create', 'portfolio:read', 'portfolio:update'
 );
 
@@ -431,6 +455,10 @@ CREATE INDEX IF NOT EXISTS idx_user_transactions_date ON user_transactions(trans
 CREATE INDEX IF NOT EXISTS idx_user_analysis_tasks_user_id ON user_analysis_tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_analysis_tasks_task_id ON user_analysis_tasks(task_id);
 CREATE INDEX IF NOT EXISTS idx_user_analysis_tasks_status ON user_analysis_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_user_backtest_tasks_user_id ON user_backtest_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_backtest_tasks_task_id ON user_backtest_tasks(task_id);
+CREATE INDEX IF NOT EXISTS idx_user_backtest_tasks_status ON user_backtest_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_user_backtest_tasks_ticker ON user_backtest_tasks(ticker);
 
 -- 系统管理相关索引
 CREATE INDEX IF NOT EXISTS idx_system_config_key ON system_config(config_key);

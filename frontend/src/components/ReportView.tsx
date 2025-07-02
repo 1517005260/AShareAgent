@@ -468,7 +468,7 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
                               {data.value || data.current || 'N/A'}
                             </div>
                             {data.trend && (
-                              <Tag size="small" color={data.trend === 'up' ? 'green' : data.trend === 'down' ? 'red' : 'blue'}>
+                              <Tag color={data.trend === 'up' ? 'green' : data.trend === 'down' ? 'red' : 'blue'}>
                                 {data.trend}
                               </Tag>
                             )}

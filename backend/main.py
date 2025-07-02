@@ -9,7 +9,7 @@ from backend.middleware import add_stats_middleware
 
 from backend.routers import logs, runs
 # 导入新增的路由器
-from backend.routers import agents, workflow, analysis, api_runs, auth, portfolio, config, stats, monitor
+from backend.routers import agents, workflow, analysis, api_runs, auth, portfolio, config, stats, monitor, backtest
 
 # 添加项目根目录到Python路径，确保可以导入初始化脚本
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -71,6 +71,7 @@ app.include_router(monitor.router)
 app.include_router(agents.router)
 app.include_router(workflow.router)
 app.include_router(analysis.router)
+app.include_router(backtest.router)
 app.include_router(api_runs.router)
 
 # 根端点API导航
@@ -92,6 +93,7 @@ def read_root():
                     "系统监控": "/api/monitor/",
                     "代理": "/api/agents/",
                     "分析": "/api/analysis/",
+                    "回测": "/api/backtest/",
                     "运行": "/api/runs/",
                     "工作流": "/api/workflow/"
                 }
@@ -120,6 +122,7 @@ def api_navigation():
             "/api/monitor": "系统监控和日志管理",
             "/api/agents": "获取各个Agent的状态和数据",
             "/api/analysis": "启动和查询股票分析任务",
+            "/api/backtest": "启动和查询回测任务",
             "/api/runs": "查询运行历史和状态(基于api_state)",
             "/api/workflow": "获取当前工作流状态"
         },

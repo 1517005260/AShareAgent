@@ -144,3 +144,134 @@ class DecisionDisplayRequest(BaseModel):
     agent_name: Optional[str] = Field(None, description="Agent名称筛选")
     ticker: Optional[str] = Field(None, description="股票代码筛选")
     limit: int = Field(50, description="返回数量限制", ge=1, le=200)
+
+
+# 回测相关数据模型
+class BacktestRequest(BaseModel):
+    """回测请求模型"""
+    ticker: str = Field(
+        ...,
+        description="股票代码，例如：'002848'",
+        example="002848"
+    )
+    start_date: str = Field(
+        ...,
+        description="回测开始日期，格式：YYYY-MM-DD",
+        example="2024-01-01"
+    )
+    end_date: str = Field(
+        ...,
+        description="回测结束日期，格式：YYYY-MM-DD",
+        example="2024-12-31"
+    )
+    initial_capital: float = Field(
+        100000.0,
+        description="初始资金",
+        gt=0,
+        example=100000.0
+    )
+    num_of_news: int = Field(
+        5,
+        description="用于情感分析的新闻文章数量（1-100）",
+        ge=1,
+        le=100,
+        example=5
+    )
+    agent_frequencies: Optional[Dict[str, str]] = Field(
+        None,
+        description="各Agent的执行频率配置",
+        example={
+            "market_data": "daily",
+            "technical": "daily",
+            "fundamentals": "weekly",
+            "sentiment": "daily",
+            "valuation": "monthly",
+            "macro": "weekly",
+            "portfolio": "daily"
+        }
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ticker": "002848",
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "initial_capital": 100000.0,
+                "num_of_news": 5,
+                "agent_frequencies": {
+                    "market_data": "daily",
+                    "technical": "daily",
+                    "fundamentals": "weekly",
+                    "sentiment": "daily",
+                    "valuation": "monthly",
+                    "macro": "weekly",
+                    "portfolio": "daily"
+                }
+            }
+        }
+
+
+class BacktestResponse(BaseModel):
+    """回测响应模型"""
+    run_id: str = Field(..., description="回测任务唯一标识符")
+    ticker: str = Field(..., description="股票代码")
+    start_date: str = Field(..., description="回测开始日期")
+    end_date: str = Field(..., description="回测结束日期")
+    status: str = Field(..., description="任务状态：running, completed, error")
+    message: str = Field(..., description="状态描述信息")
+    submitted_at: datetime = Field(..., description="任务提交时间")
+    completed_at: Optional[datetime] = Field(None, description="任务完成时间")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "run_id": "550e8400-e29b-41d4-a716-446655440001",
+                "ticker": "002848",
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "status": "running",
+                "message": "回测任务已启动",
+                "submitted_at": "2023-03-15T12:30:45.123Z",
+                "completed_at": None
+            }
+        }
+
+
+class BacktestResultData(BaseModel):
+    """回测结果数据模型"""
+    performance_metrics: Dict[str, Any] = Field(..., description="性能指标")
+    risk_metrics: Dict[str, Any] = Field(..., description="风险指标")
+    trades: List[Dict[str, Any]] = Field(..., description="交易记录")
+    portfolio_values: Dict[str, Any] = Field(..., description="组合价值时间序列")
+    benchmark_comparison: Optional[Dict[str, Any]] = Field(None, description="基准比较")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "performance_metrics": {
+                    "total_return": 0.15,
+                    "annualized_return": 0.12,
+                    "sharpe_ratio": 1.25,
+                    "max_drawdown": -0.08
+                },
+                "risk_metrics": {
+                    "volatility": 0.18,
+                    "var_95": -0.025,
+                    "beta": 1.1
+                },
+                "trades": [
+                    {
+                        "date": "2024-01-15",
+                        "action": "buy",
+                        "shares": 100,
+                        "price": 25.5,
+                        "commission": 5.0
+                    }
+                ],
+                "portfolio_values": {
+                    "dates": ["2024-01-01", "2024-01-02"],
+                    "values": [100000, 100250]
+                }
+            }
+        }
