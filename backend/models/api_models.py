@@ -1,0 +1,146 @@
+"""
+API数据模型
+
+这个模块定义了API使用的请求和响应数据模型
+"""
+
+from pydantic import BaseModel, Field
+from typing import Dict, List, Any, Optional, TypeVar, Generic
+from datetime import datetime, UTC
+
+# 类型定义
+T = TypeVar('T')
+
+
+class ApiResponse(BaseModel, Generic[T]):
+    """API响应的标准格式"""
+    success: bool = True
+    message: str = "操作成功"
+    data: Optional[T] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class AgentInfo(BaseModel):
+    """Agent信息模型"""
+    name: str
+    description: str
+    state: str = "idle"  # idle, running, completed, error
+    last_run: Optional[datetime] = None
+
+
+class RunInfo(BaseModel):
+    """运行信息模型"""
+    run_id: str
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    status: str  # "running", "completed", "error"
+    agents: List[str] = []
+
+
+class StockAnalysisRequest(BaseModel):
+    """股票分析请求模型"""
+    ticker: str = Field(
+        ...,
+        description="股票代码，例如：'002848'",
+        example="002848"
+    )
+    show_reasoning: bool = Field(
+        True,
+        description="是否显示分析推理过程",
+        example=True
+    )
+    num_of_news: int = Field(
+        5,
+        description="用于情感分析的新闻文章数量（1-100）",
+        ge=1,
+        le=100,
+        example=5
+    )
+    initial_capital: float = Field(
+        100000.0,
+        description="初始资金",
+        gt=0,
+        example=100000.0
+    )
+    initial_position: int = Field(
+        0,
+        description="初始持仓数量",
+        ge=0,
+        example=0
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ticker": "002848",
+                "show_reasoning": True,
+                "num_of_news": 5,
+                "initial_capital": 100000.0,
+                "initial_position": 0
+            }
+        }
+
+
+class StockAnalysisResponse(BaseModel):
+    """股票分析响应模型
+
+    用于表示股票分析任务的响应信息，包含运行ID、状态和时间戳等
+    """
+    run_id: str = Field(..., description="分析任务唯一标识符")
+    ticker: str = Field(..., description="股票代码")
+    status: str = Field(..., description="任务状态：running, completed, error")
+    message: str = Field(..., description="状态描述信息")
+    submitted_at: datetime = Field(..., description="任务提交时间")
+    completed_at: Optional[datetime] = Field(None, description="任务完成时间")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "run_id": "550e8400-e29b-41d4-a716-446655440000",
+                "ticker": "002848",
+                "status": "running",
+                "message": "分析任务已启动",
+                "submitted_at": "2023-03-15T12:30:45.123Z",
+                "completed_at": None
+            }
+        }
+
+
+class AgentCreateRequest(BaseModel):
+    """创建Agent请求模型"""
+    name: str = Field(..., description="Agent名称（唯一标识符）")
+    display_name: str = Field(..., description="显示名称")
+    description: Optional[str] = Field(None, description="描述")
+    agent_type: str = Field("analysis", description="Agent类型")
+    status: str = Field("active", description="状态")
+    config: Optional[Dict[str, Any]] = Field(None, description="配置信息")
+
+
+class AgentUpdateRequest(BaseModel):
+    """更新Agent请求模型"""
+    display_name: Optional[str] = Field(None, description="显示名称")
+    description: Optional[str] = Field(None, description="描述")
+    status: Optional[str] = Field(None, description="状态")
+    config: Optional[Dict[str, Any]] = Field(None, description="配置信息")
+
+
+class AgentDecisionInfo(BaseModel):
+    """Agent决策信息模型"""
+    id: int
+    run_id: str
+    agent_name: str
+    agent_display_name: Optional[str] = None
+    ticker: str
+    decision_type: str
+    decision_data: Dict[str, Any]
+    confidence_score: Optional[float] = None
+    reasoning: Optional[str] = None
+    created_at: datetime
+
+
+class DecisionDisplayRequest(BaseModel):
+    """决策显示格式请求模型"""
+    run_id: Optional[str] = Field(None, description="运行ID筛选")
+    agent_name: Optional[str] = Field(None, description="Agent名称筛选")
+    ticker: Optional[str] = Field(None, description="股票代码筛选")
+    limit: int = Field(50, description="返回数量限制", ge=1, le=200)

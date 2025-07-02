@@ -1,0 +1,137 @@
+{
+  "sample_stock_data": {
+    "000001": {
+      "basic_info": {
+        "stock_code": "000001",
+        "stock_name": "平安银行",
+        "industry": "银行业",
+        "market_cap": 241728000000,
+        "total_shares": 19356000000
+      },
+      "price_data": [
+        {
+          "date": "2024-01-01",
+          "open": 12.45,
+          "high": 12.88,
+          "low": 12.20,
+          "close": 12.67,
+          "volume": 42156789,
+          "amount": 534567890
+        },
+        {
+          "date": "2024-01-02", 
+          "open": 12.67,
+          "high": 12.95,
+          "low": 12.45,
+          "close": 12.78,
+          "volume": 38456123,
+          "amount": 489123456
+        }
+      ],
+      "financial_metrics": {
+        "pe_ratio": 5.23,
+        "pb_ratio": 0.67,
+        "ps_ratio": 1.85,
+        "roe": 12.5,
+        "roa": 0.8,
+        "net_margin": 28.6,
+        "debt_to_equity": 0.38,
+        "current_ratio": 1.45,
+        "revenue_growth_yoy": 15.2,
+        "profit_growth_yoy": 18.7
+      },
+      "news_sentiment": [
+        {
+          "title": "平安银行三季度业绩超预期",
+          "content": "营收同比增长15%，净利润增长20%",
+          "sentiment_score": 0.8,
+          "publish_time": "2024-01-15 09:30:00"
+        },
+        {
+          "title": "银行业监管政策调整影响分析",
+          "content": "新监管要求对银行业务模式提出挑战",
+          "sentiment_score": -0.2,
+          "publish_time": "2024-01-14 16:45:00"
+        }
+      ]
+    },
+    "600519": {
+      "basic_info": {
+        "stock_code": "600519",
+        "stock_name": "贵州茅台",
+        "industry": "食品饮料",
+        "market_cap": 2107200000000,
+        "total_shares": 1256000000
+      },
+      "price_data": [
+        {
+          "date": "2024-01-01",
+          "open": 1650.00,
+          "high": 1688.50,
+          "low": 1642.30,
+          "close": 1675.80,
+          "volume": 8765432,
+          "amount": 14567890123
+        }
+      ],
+      "financial_metrics": {
+        "pe_ratio": 28.50,
+        "pb_ratio": 9.80,
+        "ps_ratio": 15.2,
+        "roe": 24.8,
+        "roa": 18.5,
+        "net_margin": 52.3,
+        "debt_to_equity": 0.15,
+        "current_ratio": 2.85,
+        "revenue_growth_yoy": 8.5,
+        "profit_growth_yoy": 12.3
+      }
+    }
+  },
+  "test_scenarios": {
+    "bullish_signals": {
+      "technical": {"signal": "bullish", "confidence": 0.8},
+      "fundamental": {"signal": "bullish", "confidence": 0.75},
+      "sentiment": {"signal": "bullish", "confidence": 0.7},
+      "valuation": {"signal": "bullish", "confidence": 0.65}
+    },
+    "bearish_signals": {
+      "technical": {"signal": "bearish", "confidence": 0.7},
+      "fundamental": {"signal": "bearish", "confidence": 0.8},
+      "sentiment": {"signal": "bearish", "confidence": 0.75},
+      "valuation": {"signal": "bearish", "confidence": 0.85}
+    },
+    "mixed_signals": {
+      "technical": {"signal": "bullish", "confidence": 0.6},
+      "fundamental": {"signal": "bearish", "confidence": 0.7},
+      "sentiment": {"signal": "neutral", "confidence": 0.5},
+      "valuation": {"signal": "bearish", "confidence": 0.8}
+    }
+  },
+  "api_responses": {
+    "akshare_success": {
+      "columns": ["代码", "名称", "最新价", "涨跌幅", "总市值", "市盈率-动态", "市净率"],
+      "data": [
+        ["000001", "平安银行", 12.67, 2.45, 241728000000, 5.23, 0.67],
+        ["600519", "贵州茅台", 1675.80, 0.8, 2107200000000, 28.50, 9.80]
+      ]
+    },
+    "eastmoney_success": {
+      "rc": 0,
+      "data": {
+        "f43": 1267,
+        "f44": 30,
+        "f45": 2.45,
+        "f46": 421567,
+        "f47": 534567890,
+        "f116": 241728000000,
+        "f114": 5.23,
+        "f167": 0.67
+      }
+    },
+    "api_error": {
+      "error_code": 500,
+      "error_message": "API服务暂时不可用"
+    }
+  }
+}

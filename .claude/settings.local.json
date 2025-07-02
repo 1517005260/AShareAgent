@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(gh pr:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:arxiv.org)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(poetry install:*)",
+      "Bash(poetry show:*)",
+      "Bash(poetry run python:*)",
+      "Bash(poetry add:*)",
+      "Bash(pytest:*)",
+      "Bash(rg:*)",
+      "Bash(rm:*)",
+      "Bash(timeout 30 poetry run python src/backtester.py --ticker 600519 --start-date 2024-12-11 --end-date 2024-12-31)",
+      "Bash(sqlite3:*)",
+      "Bash(poetry run pytest:*)",
+      "Bash(./test_runner.sh:*)",
+      "Bash(dos2unix:*)",
+      "Bash(git init:*)"
+    ],
+    "deny": []
+  }
+}
