@@ -23,7 +23,9 @@
       "Bash(poetry run pytest:*)",
       "Bash(./test_runner.sh:*)",
       "Bash(dos2unix:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(poetry lock:*)",
+      "Bash(pkill:*)"
     ],
     "deny": []
   }

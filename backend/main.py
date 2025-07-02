@@ -5,9 +5,11 @@ import sys
 import os
 import logging
 
-from .routers import logs, runs
+from backend.middleware import add_stats_middleware
+
+from backend.routers import logs, runs
 # 导入新增的路由器
-from .routers import agents, workflow, analysis, api_runs
+from backend.routers import agents, workflow, analysis, api_runs, auth, portfolio, config, stats, monitor
 
 # 添加项目根目录到Python路径，确保可以导入初始化脚本
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -53,11 +55,19 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
+# 添加API统计中间件
+add_stats_middleware(app)
+
 # 包含现有路由器
 app.include_router(logs.router)
 app.include_router(runs.router)
 
 # 包含新增的路由器
+app.include_router(auth.router)
+app.include_router(config.router)
+app.include_router(stats.router)
+app.include_router(portfolio.router)
+app.include_router(monitor.router)
 app.include_router(agents.router)
 app.include_router(workflow.router)
 app.include_router(analysis.router)
@@ -75,6 +85,11 @@ def read_root():
             "新API": {
                 "介绍": "采用标准化的ApiResponse格式的新API",
                 "端点": {
+                    "认证": "/api/auth/",
+                    "系统配置": "/api/config/",
+                    "数据统计": "/api/stats/",
+                    "投资组合": "/api/portfolios/",
+                    "系统监控": "/api/monitor/",
                     "代理": "/api/agents/",
                     "分析": "/api/analysis/",
                     "运行": "/api/runs/",
@@ -98,6 +113,11 @@ def api_navigation():
     return {
         "message": "A股投资Agent API导航",
         "api_sections": {
+            "/api/auth": "用户认证和权限管理",
+            "/api/config": "系统配置和参数管理",
+            "/api/stats": "数据统计和报表功能",
+            "/api/portfolios": "投资组合管理和交易记录",
+            "/api/monitor": "系统监控和日志管理",
             "/api/agents": "获取各个Agent的状态和数据",
             "/api/analysis": "启动和查询股票分析任务",
             "/api/runs": "查询运行历史和状态(基于api_state)",
