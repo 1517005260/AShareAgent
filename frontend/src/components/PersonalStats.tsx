@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import { Card, Row, Col, Statistic, Select, Spin, Alert, Tag, Progress } from 'antd';
+import {
+  BarChartOutlined,
+  TrophyOutlined,
+  FundOutlined,
+  RiseOutlined,
+  FallOutlined,
+  DollarOutlined,
+  PieChartOutlined,
+  LineChartOutlined
+} from '@ant-design/icons';
 import { ApiService } from '../services/api';
+
+const { Option } = Select;
 
 interface PersonalSummary {
   user_stats: {
@@ -37,7 +50,7 @@ const PersonalStats: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await ApiService.getPersonalSummary();
       if (response.success && response.data) {
         setSummary(response.data);
@@ -67,245 +80,317 @@ const PersonalStats: React.FC = () => {
   };
 
   const getReturnColor = (value: number) => {
-    if (value > 0) return 'text-green-600';
-    if (value < 0) return 'text-red-600';
-    return 'text-gray-600';
+    if (value > 0) return '#52c41a';
+    if (value < 0) return '#ff4d4f';
+    return '#d9d9d9';
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center p-8">
-        <div className="text-lg">加载个人统计中...</div>
+      <div style={{ textAlign: 'center', padding: '100px' }}>
+        <Spin size="large" />
+        <div style={{ marginTop: 16, color: '#666' }}>加载个人统计中...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          {error}
-        </div>
+      <div style={{ padding: '24px' }}>
+        <Alert
+          message="统计数据获取失败"
+          description={error}
+          type="error"
+          showIcon
+        />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">个人统计摘要</h2>
-        <div className="flex space-x-2">
-          {[
-            { key: '7d', label: '7天' },
-            { key: '30d', label: '30天' },
-            { key: '90d', label: '90天' },
-            { key: 'all', label: '全部' }
-          ].map((period) => (
-            <button
-              key={period.key}
-              onClick={() => setTimeRange(period.key as any)}
-              className={`px-3 py-1 text-sm rounded ${
-                timeRange === period.key
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {period.label}
-            </button>
-          ))}
-        </div>
+    <div style={{ padding: '24px' }}>
+      {/* 头部 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 'bold' }}>个人统计摘要</h2>
+        <Select
+          value={timeRange}
+          onChange={setTimeRange}
+          style={{ width: 120 }}
+        >
+          <Option value="7d">7天</Option>
+          <Option value="30d">30天</Option>
+          <Option value="90d">90天</Option>
+          <Option value="all">全部</Option>
+        </Select>
       </div>
 
       {summary ? (
-        <div className="space-y-6">
-          {/* 总体统计 */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-            <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className="text-3xl font-bold text-blue-600">
-                {summary.user_stats?.total_analyses || 0}
-              </div>
-              <div className="text-sm text-gray-600 mt-1">分析次数</div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className="text-3xl font-bold text-green-600">
-                {summary.user_stats?.total_backtests || 0}
-              </div>
-              <div className="text-sm text-gray-600 mt-1">回测次数</div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className="text-3xl font-bold text-purple-600">
-                {summary.user_stats?.total_portfolios || 0}
-              </div>
-              <div className="text-sm text-gray-600 mt-1">投资组合</div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className="text-3xl font-bold text-orange-600">
-                {formatPercent(summary.user_stats?.success_rate || 0)}
-              </div>
-              <div className="text-sm text-gray-600 mt-1">成功率</div>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow p-6 text-center">
-              <div className={`text-3xl font-bold ${getReturnColor(summary.user_stats?.avg_return || 0)}`}>
-                {formatPercent(summary.user_stats?.avg_return || 0)}
-              </div>
-              <div className="text-sm text-gray-600 mt-1">平均收益率</div>
-            </div>
-          </div>
+        <>
+          {/* 总体统计卡片 */}
+          <Row gutter={16} style={{ marginBottom: 24 }}>
+            <Col span={5}>
+              <Card>
+                <Statistic
+                  title="分析次数"
+                  value={summary.user_stats?.total_analyses || 0}
+                  prefix={<BarChartOutlined style={{ color: '#1890ff' }} />}
+                  valueStyle={{ color: '#1890ff' }}
+                />
+              </Card>
+            </Col>
+            <Col span={5}>
+              <Card>
+                <Statistic
+                  title="回测次数"
+                  value={summary.user_stats?.total_backtests || 0}
+                  prefix={<TrophyOutlined style={{ color: '#52c41a' }} />}
+                  valueStyle={{ color: '#52c41a' }}
+                />
+              </Card>
+            </Col>
+            <Col span={5}>
+              <Card>
+                <Statistic
+                  title="投资组合"
+                  value={summary.user_stats?.total_portfolios || 0}
+                  prefix={<FundOutlined style={{ color: '#722ed1' }} />}
+                  valueStyle={{ color: '#722ed1' }}
+                />
+              </Card>
+            </Col>
+            <Col span={5}>
+              <Card>
+                <Statistic
+                  title="成功率"
+                  value={formatPercent(summary.user_stats?.success_rate || 0)}
+                  prefix={<RiseOutlined style={{ color: '#faad14' }} />}
+                  valueStyle={{ color: '#faad14' }}
+                />
+              </Card>
+            </Col>
+            <Col span={4}>
+              <Card>
+                <Statistic
+                  title="平均收益率"
+                  value={formatPercent(summary.user_stats?.avg_return || 0)}
+                  prefix={
+                    (summary.user_stats?.avg_return || 0) >= 0
+                      ? <RiseOutlined style={{ color: '#52c41a' }} />
+                      : <FallOutlined style={{ color: '#ff4d4f' }} />
+                  }
+                  valueStyle={{ color: getReturnColor(summary.user_stats?.avg_return || 0) }}
+                />
+              </Card>
+            </Col>
+          </Row>
 
-          {/* 投资表现摘要 */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold mb-4">投资表现</h3>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {formatCurrency(summary.performance_summary?.total_invested || 0)}
-                </div>
-                <div className="text-sm text-gray-600">总投资金额</div>
-              </div>
-              
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {formatCurrency(summary.performance_summary?.current_value || 0)}
-                </div>
-                <div className="text-sm text-gray-600">当前总价值</div>
-              </div>
-              
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${getReturnColor(summary.performance_summary?.profit_loss || 0)}`}>
-                  {formatCurrency(summary.performance_summary?.profit_loss || 0)}
-                </div>
-                <div className="text-sm text-gray-600">总盈亏</div>
-              </div>
-              
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {formatPercent(summary.performance_summary?.best_return || 0)}
-                </div>
-                <div className="text-sm text-gray-600">最佳收益率</div>
-              </div>
-              
-              <div className="text-center">
-                <div className="text-2xl font-bold text-red-600">
-                  {formatPercent(summary.performance_summary?.worst_return || 0)}
-                </div>
-                <div className="text-sm text-gray-600">最差收益率</div>
+          {/* 投资表现 */}
+          <Card title="投资表现" style={{ marginBottom: 24 }}>
+            <Row gutter={16}>
+              <Col span={5}>
+                <Statistic
+                  title="总投资金额"
+                  value={formatCurrency(summary.performance_summary?.total_invested || 0)}
+                  prefix={<DollarOutlined style={{ color: '#1890ff' }} />}
+                />
+              </Col>
+              <Col span={5}>
+                <Statistic
+                  title="当前总价值"
+                  value={formatCurrency(summary.performance_summary?.current_value || 0)}
+                  prefix={<DollarOutlined style={{ color: '#52c41a' }} />}
+                />
+              </Col>
+              <Col span={5}>
+                <Statistic
+                  title="总盈亏"
+                  value={formatCurrency(summary.performance_summary?.profit_loss || 0)}
+                  valueStyle={{ color: getReturnColor(summary.performance_summary?.profit_loss || 0) }}
+                />
+              </Col>
+              <Col span={5}>
+                <Statistic
+                  title="最佳收益率"
+                  value={formatPercent(summary.performance_summary?.best_return || 0)}
+                  valueStyle={{ color: '#52c41a' }}
+                />
+              </Col>
+              <Col span={4}>
+                <Statistic
+                  title="最差收益率"
+                  value={formatPercent(summary.performance_summary?.worst_return || 0)}
+                  valueStyle={{ color: '#ff4d4f' }}
+                />
+              </Col>
+            </Row>
+
+            {/* 收益率进度条 */}
+            <div style={{ marginTop: 24 }}>
+              <div style={{ marginBottom: 8, fontWeight: 500 }}>收益率区间</div>
+              <Progress
+                percent={50}
+                showInfo={false}
+                strokeColor={{
+                  '0%': '#ff4d4f',
+                  '50%': '#faad14',
+                  '100%': '#52c41a',
+                }}
+                style={{ marginBottom: 8 }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666' }}>
+                <span>最差: {formatPercent(summary.performance_summary?.worst_return || 0)}</span>
+                <span>平均: {formatPercent(summary.user_stats?.avg_return || 0)}</span>
+                <span>最佳: {formatPercent(summary.performance_summary?.best_return || 0)}</span>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* 最近活动 */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 最近分析 */}
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b">
-                <h4 className="font-semibold">最近分析</h4>
-              </div>
-              <div className="p-4">
+          <Row gutter={16}>
+            <Col span={8}>
+              <Card
+                title={
+                  <span>
+                    <BarChartOutlined style={{ marginRight: 8 }} />
+                    最近分析
+                  </span>
+                }
+                size="small"
+              >
                 {(summary.recent_activity?.analyses || []).length === 0 ? (
-                  <div className="text-center text-gray-500 py-4">
-                    暂无分析记录
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                    <PieChartOutlined style={{ fontSize: '32px', marginBottom: '8px' }} />
+                    <div>暂无分析记录</div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {(summary.recent_activity?.analyses || []).slice(0, 5).map((analysis, index) => (
-                      <div key={index} className="flex justify-between items-center text-sm">
-                        <div>
-                          <div className="font-medium">{analysis.ticker || analysis.stock_code}</div>
-                          <div className="text-gray-500">
-                            {analysis.created_at ? new Date(analysis.created_at).toLocaleDateString('zh-CN') : ''}
+                      <div key={index} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontWeight: 'bold', fontSize: '13px' }}>
+                              {analysis.ticker || analysis.stock_code}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#666' }}>
+                              {analysis.created_at ? new Date(analysis.created_at).toLocaleDateString('zh-CN') : ''}
+                            </div>
                           </div>
-                        </div>
-                        <div className={`px-2 py-1 rounded text-xs ${
-                          analysis.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          analysis.status === 'running' ? 'bg-blue-100 text-blue-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {analysis.status === 'completed' ? '完成' :
-                           analysis.status === 'running' ? '运行中' : '失败'}
+                          <Tag
+                            color={
+                              analysis.status === 'completed' ? 'success' :
+                                analysis.status === 'running' ? 'processing' : 'error'
+                            }
+                          >
+                            {analysis.status === 'completed' ? '完成' :
+                              analysis.status === 'running' ? '运行中' : '失败'}
+                          </Tag>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
+              </Card>
+            </Col>
 
-            {/* 最近回测 */}
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b">
-                <h4 className="font-semibold">最近回测</h4>
-              </div>
-              <div className="p-4">
+            <Col span={8}>
+              <Card
+                title={
+                  <span>
+                    <TrophyOutlined style={{ marginRight: 8 }} />
+                    最近回测
+                  </span>
+                }
+                size="small"
+              >
                 {(summary.recent_activity?.backtests || []).length === 0 ? (
-                  <div className="text-center text-gray-500 py-4">
-                    暂无回测记录
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                    <LineChartOutlined style={{ fontSize: '32px', marginBottom: '8px' }} />
+                    <div>暂无回测记录</div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {(summary.recent_activity?.backtests || []).slice(0, 5).map((backtest, index) => (
-                      <div key={index} className="flex justify-between items-center text-sm">
-                        <div>
-                          <div className="font-medium">{backtest.ticker}</div>
-                          <div className="text-gray-500">
-                            {backtest.created_at ? new Date(backtest.created_at).toLocaleDateString('zh-CN') : ''}
+                      <div key={index} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontWeight: 'bold', fontSize: '13px' }}>
+                              {backtest.ticker}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#666' }}>
+                              {backtest.created_at ? new Date(backtest.created_at).toLocaleDateString('zh-CN') : ''}
+                            </div>
                           </div>
-                        </div>
-                        <div className={`px-2 py-1 rounded text-xs ${
-                          backtest.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          backtest.status === 'running' ? 'bg-blue-100 text-blue-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {backtest.status === 'completed' ? '完成' :
-                           backtest.status === 'running' ? '运行中' : '失败'}
+                          <Tag
+                            color={
+                              backtest.status === 'completed' ? 'success' :
+                                backtest.status === 'running' ? 'processing' : 'error'
+                            }
+                          >
+                            {backtest.status === 'completed' ? '完成' :
+                              backtest.status === 'running' ? '运行中' : '失败'}
+                          </Tag>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
+              </Card>
+            </Col>
 
-            {/* 投资组合状态 */}
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b">
-                <h4 className="font-semibold">投资组合</h4>
-              </div>
-              <div className="p-4">
+            <Col span={8}>
+              <Card
+                title={
+                  <span>
+                    <FundOutlined style={{ marginRight: 8 }} />
+                    投资组合状态
+                  </span>
+                }
+                size="small"
+              >
                 {(summary.recent_activity?.portfolios || []).length === 0 ? (
-                  <div className="text-center text-gray-500 py-4">
-                    暂无投资组合
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                    <FundOutlined style={{ fontSize: '32px', marginBottom: '8px' }} />
+                    <div>暂无投资组合</div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {(summary.recent_activity?.portfolios || []).slice(0, 5).map((portfolio, index) => (
-                      <div key={index} className="text-sm">
-                        <div className="flex justify-between items-center">
-                          <div className="font-medium">{portfolio.name}</div>
-                          <div className={`${getReturnColor(portfolio.profit_loss_percent || 0)}`}>
-                            {formatPercent(portfolio.profit_loss_percent || 0)}
+                      <div key={index} style={{ padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                        <div style={{ marginBottom: '4px' }}>
+                          <div style={{ fontWeight: 'bold', fontSize: '13px' }}>
+                            {portfolio.name}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#666' }}>
+                            {formatCurrency(portfolio.current_value || 0)}
                           </div>
                         </div>
-                        <div className="text-gray-500 text-xs">
-                          {formatCurrency(portfolio.current_value || 0)}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ fontSize: '11px' }}>
+                            收益:
+                            <span style={{ color: getReturnColor(portfolio.profit_loss_percent || 0), marginLeft: 4 }}>
+                              {formatPercent(portfolio.profit_loss_percent || 0)}
+                            </span>
+                          </div>
+                          <Tag color="blue">
+                            {portfolio.risk_level === 'high' ? '高风险' :
+                              portfolio.risk_level === 'medium' ? '中风险' : '低风险'}
+                          </Tag>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
-        </div>
+              </Card>
+            </Col>
+          </Row>
+        </>
       ) : (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="text-center text-gray-500 py-8">
-            暂无统计数据
+        <Card>
+          <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>
+            <BarChartOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
+            <div>暂无统计数据</div>
           </div>
-        </div>
+        </Card>
       )}
     </div>
   );

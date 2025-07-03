@@ -52,7 +52,14 @@ def execute_backtest_with_user(request: BacktestRequest, run_id: str, user_id: i
         # 使用用户提供的频率配置或默认配置
         agent_frequencies = request.agent_frequencies or default_frequencies
         
-        # 创建回测器实例
+        # 获取高级参数
+        benchmark_type = getattr(request, 'benchmark_type', 'spe') or 'spe'
+        transaction_cost = getattr(request, 'transaction_cost', 0.001)
+        slippage = getattr(request, 'slippage', 0.0005)
+        time_granularity = getattr(request, 'time_granularity', 'daily')
+        rebalance_frequency = getattr(request, 'rebalance_frequency', 'daily')
+        
+        # 创建回测器实例 - 按照正确的参数顺序
         backtester = IntelligentBacktester(
             agent=run_hedge_fund,
             ticker=request.ticker,
@@ -60,7 +67,15 @@ def execute_backtest_with_user(request: BacktestRequest, run_id: str, user_id: i
             end_date=request.end_date,
             initial_capital=request.initial_capital,
             num_of_news=request.num_of_news,
-            agent_frequencies=agent_frequencies
+            commission_rate=transaction_cost,  # 使用旧参数名保持兼容
+            slippage_rate=slippage,           # 使用旧参数名保持兼容
+            benchmark_ticker='000001',        # 保持参数兼容性
+            benchmark_type=benchmark_type,    # 使用用户选择的基准策略
+            agent_frequencies=agent_frequencies,
+            time_granularity=time_granularity,
+            rebalance_frequency=rebalance_frequency,
+            transaction_cost=transaction_cost,
+            slippage=slippage
         )
         
         # 执行回测
@@ -69,7 +84,7 @@ def execute_backtest_with_user(request: BacktestRequest, run_id: str, user_id: i
         
         # 分析性能
         logger.info("开始分析回测性能")
-        performance_df = backtester.analyze_performance(save_plots=False)
+        plot_path = backtester.analyze_performance(save_plots=True)
         
         # 获取回测结果
         result_data = {
@@ -86,12 +101,14 @@ def execute_backtest_with_user(request: BacktestRequest, run_id: str, user_id: i
                 "beta": backtester.beta if hasattr(backtester, 'beta') else None,
                 "alpha": backtester.alpha if hasattr(backtester, 'alpha') else None,
             },
-            "trades": [trade.to_dict() for trade in backtester.trades] if hasattr(backtester, 'trades') else [],
+            "trades": [trade.to_dict() for trade in backtester.trade_executor.trades] if hasattr(backtester, 'trade_executor') and hasattr(backtester.trade_executor, 'trades') else [],
             "portfolio_values": {
                 "dates": [str(date) for date in backtester.portfolio_values.index] if hasattr(backtester, 'portfolio_values') else [],
                 "values": backtester.portfolio_values.tolist() if hasattr(backtester, 'portfolio_values') else []
             },
-            "benchmark_comparison": backtester.benchmark_results if hasattr(backtester, 'benchmark_results') else None
+            "benchmark_comparison": backtester.benchmark_results if hasattr(backtester, 'benchmark_results') else None,
+            "plot_path": plot_path if plot_path else None,
+            "run_id": run_id
         }
         
         # 更新数据库任务状态为完成
@@ -145,7 +162,12 @@ class BacktestService:
             parameters = {
                 "initial_capital": request.initial_capital,
                 "num_of_news": request.num_of_news,
-                "agent_frequencies": request.agent_frequencies
+                "agent_frequencies": request.agent_frequencies,
+                "time_granularity": getattr(request, 'time_granularity', 'daily'),
+                "benchmark_type": getattr(request, 'benchmark_type', 'spe'),
+                "rebalance_frequency": getattr(request, 'rebalance_frequency', 'daily'),
+                "transaction_cost": getattr(request, 'transaction_cost', 0.001),
+                "slippage": getattr(request, 'slippage', 0.0005)
             }
             
             with self.db_manager.get_connection() as conn:

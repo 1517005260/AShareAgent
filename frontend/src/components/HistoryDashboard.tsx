@@ -13,14 +13,18 @@ import {
   Typography,
   Row,
   Col,
-  Badge
+  Badge,
+  Tabs
 } from 'antd';
 import {
   EyeOutlined,
   ReloadOutlined,
   SearchOutlined,
   FileTextOutlined,
-  DatabaseOutlined
+  DatabaseOutlined,
+  BarChartOutlined,
+  TrophyOutlined,
+  PictureOutlined
 } from '@ant-design/icons';
 import {
   ApiService,
@@ -31,13 +35,21 @@ import moment from 'moment';
 const { Option } = Select;
 const { Search } = Input;
 const { Text, Paragraph } = Typography;
+const { TabPane } = Tabs;
 
 const HistoryDashboard: React.FC = () => {
   const [decisions, setDecisions] = useState<AgentDecision[]>([]);
+  const [analysisHistory, setAnalysisHistory] = useState<any[]>([]);
+  const [backtestHistory, setBacktestHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('decisions');
   const [decisionDetailModalVisible, setDecisionDetailModalVisible] = useState(false);
   const [formattedModalVisible, setFormattedModalVisible] = useState(false);
+  const [analysisDetailModalVisible, setAnalysisDetailModalVisible] = useState(false);
+  const [backtestDetailModalVisible, setBacktestDetailModalVisible] = useState(false);
   const [selectedDecision, setSelectedDecision] = useState<AgentDecision | null>(null);
+  const [selectedAnalysis, setSelectedAnalysis] = useState<any>(null);
+  const [selectedBacktest, setSelectedBacktest] = useState<any>(null);
   const [formattedText, setFormattedText] = useState<string>('');
   const [filters, setFilters] = useState({
     run_id: '',
@@ -66,10 +78,64 @@ const HistoryDashboard: React.FC = () => {
     }
   };
 
+  const fetchAnalysisHistory = async () => {
+    setLoading(true);
+    try {
+      const response = await ApiService.getAnalysisHistory({ limit: 50 });
+      if (response.success && response.data) {
+        setAnalysisHistory(response.data.tasks || []);
+      }
+    } catch (error) {
+      message.error('获取分析历史失败');
+      console.error('Fetch analysis history error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchBacktestHistory = async () => {
+    setLoading(true);
+    try {
+      const response = await ApiService.getBacktestHistory({ limit: 50 });
+      if (response.success && response.data) {
+        setBacktestHistory(response.data.tasks || []);
+      }
+    } catch (error) {
+      message.error('获取回测历史失败');
+      console.error('Fetch backtest history error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCurrentTabData = () => {
+    switch (activeTab) {
+      case 'decisions':
+        fetchDecisions();
+        break;
+      case 'analysis':
+        fetchAnalysisHistory();
+        break;
+      case 'backtest':
+        fetchBacktestHistory();
+        break;
+    }
+  };
+
 
   const showDecisionDetailModal = (decision: AgentDecision) => {
     setSelectedDecision(decision);
     setDecisionDetailModalVisible(true);
+  };
+
+  const showAnalysisDetailModal = (analysis: any) => {
+    setSelectedAnalysis(analysis);
+    setAnalysisDetailModalVisible(true);
+  };
+
+  const showBacktestDetailModal = (backtest: any) => {
+    setSelectedBacktest(backtest);
+    setBacktestDetailModalVisible(true);
   };
 
   const showFormattedDecision = async (runId: string) => {
@@ -84,6 +150,36 @@ const HistoryDashboard: React.FC = () => {
     } catch (error) {
       message.error('获取格式化决策失败');
       console.error('Get formatted decision error:', error);
+    }
+  };
+
+  const viewAnalysisResult = async (taskId: string) => {
+    try {
+      const response = await ApiService.getAnalysisResult(taskId);
+      if (response.success && response.data) {
+        setFormattedText(JSON.stringify(response.data.result, null, 2));
+        setFormattedModalVisible(true);
+      } else {
+        message.error('获取分析结果失败');
+      }
+    } catch (error) {
+      message.error('获取分析结果失败');
+      console.error('Get analysis result error:', error);
+    }
+  };
+
+  const viewBacktestResult = async (taskId: string) => {
+    try {
+      const response = await ApiService.getBacktestResult(taskId);
+      if (response.success && response.data) {
+        setFormattedText(JSON.stringify(response.data.result, null, 2));
+        setFormattedModalVisible(true);
+      } else {
+        message.error('获取回测结果失败');
+      }
+    } catch (error) {
+      message.error('获取回测结果失败');
+      console.error('Get backtest result error:', error);
     }
   };
 
@@ -104,6 +200,10 @@ const HistoryDashboard: React.FC = () => {
   };
 
   useEffect(() => {
+    fetchCurrentTabData();
+  }, [activeTab]);
+
+  useEffect(() => {
     fetchDecisions();
   }, []);
 
@@ -114,6 +214,16 @@ const HistoryDashboard: React.FC = () => {
       case 'sell': return 'error';
       case 'hold': return 'warning';
       case 'analysis': return 'blue';
+      default: return 'default';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'completed': return 'success';
+      case 'running': return 'processing';
+      case 'pending': return 'warning';
+      case 'failed': return 'error';
       default: return 'default';
     }
   };
@@ -158,8 +268,17 @@ const HistoryDashboard: React.FC = () => {
       dataIndex: 'confidence_score',
       key: 'confidence_score',
       width: 100,
-      render: (score: number) => 
-        score ? `${(score * 100).toFixed(1)}%` : '-',
+      render: (score: number) => {
+        if (score === null || score === undefined) return '-';
+        if (typeof score === 'number') {
+          if (score >= 0 && score <= 1) {
+            return `${(score * 100).toFixed(1)}%`;
+          } else if (score > 1 && score <= 100) {
+            return `${score.toFixed(1)}%`;
+          }
+        }
+        return score ? score.toString() : '-';
+      },
     },
     {
       title: '时间',
@@ -196,102 +315,322 @@ const HistoryDashboard: React.FC = () => {
     },
   ];
 
-  return (
-    <>
-      <Row gutter={16}>
-        <Col span={24}>
-          <Card
-            title={
-              <Space>
-                <DatabaseOutlined />
-                <span>Agent决策历史</span>
-                <Badge count={decisions.length} />
-              </Space>
-            }
-            extra={
+  const analysisColumns = [
+    {
+      title: '任务ID',
+      dataIndex: 'task_id',
+      key: 'task_id',
+      width: 150,
+      render: (text: string) => (
+        <code style={{ fontSize: '11px' }}>{text.substring(0, 8)}...</code>
+      ),
+    },
+    {
+      title: '股票代码',
+      dataIndex: 'ticker',
+      key: 'ticker',
+      width: 100,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 100,
+      render: (status: string) => (
+        <Tag color={getStatusColor(status)}>
+          {status?.toUpperCase() || 'UNKNOWN'}
+        </Tag>
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 150,
+      render: (timestamp: string) => 
+        timestamp ? moment(timestamp).format('MM-DD HH:mm:ss') : '-',
+    },
+    {
+      title: '完成时间',
+      dataIndex: 'completed_at',
+      key: 'completed_at',
+      width: 150,
+      render: (timestamp: string) => 
+        timestamp ? moment(timestamp).format('MM-DD HH:mm:ss') : '-',
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 200,
+      render: (_: any, record: any) => (
+        <Space>
+          <Button
+            type="link"
+            icon={<EyeOutlined />}
+            onClick={() => showAnalysisDetailModal(record)}
+            size="small"
+          >
+            详情
+          </Button>
+          {record.status === 'completed' && (
+            <Button
+              type="link"
+              icon={<FileTextOutlined />}
+              onClick={() => viewAnalysisResult(record.task_id)}
+              size="small"
+            >
+              查看报告
+            </Button>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
+  const backtestColumns = [
+    {
+      title: '任务ID',
+      dataIndex: 'task_id',
+      key: 'task_id',
+      width: 150,
+      render: (text: string) => (
+        <code style={{ fontSize: '11px' }}>{text.substring(0, 8)}...</code>
+      ),
+    },
+    {
+      title: '股票代码',
+      dataIndex: 'ticker',
+      key: 'ticker',
+      width: 100,
+    },
+    {
+      title: '回测期间',
+      key: 'period',
+      width: 200,
+      render: (_: any, record: any) => (
+        <span>{record.start_date} 至 {record.end_date}</span>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 100,
+      render: (status: string) => (
+        <Tag color={getStatusColor(status)}>
+          {status?.toUpperCase() || 'UNKNOWN'}
+        </Tag>
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 150,
+      render: (timestamp: string) => 
+        timestamp ? moment(timestamp).format('MM-DD HH:mm:ss') : '-',
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 250,
+      render: (_: any, record: any) => (
+        <Space>
+          <Button
+            type="link"
+            icon={<EyeOutlined />}
+            onClick={() => showBacktestDetailModal(record)}
+            size="small"
+          >
+            详情
+          </Button>
+          {record.status === 'completed' && (
+            <>
               <Button
-                icon={<ReloadOutlined />}
-                onClick={fetchDecisions}
-                loading={loading}
+                type="link"
+                icon={<BarChartOutlined />}
+                onClick={() => viewBacktestResult(record.task_id)}
                 size="small"
               >
-                刷新
+                查看结果
               </Button>
-            }
-          >
-            {/* 过滤器 */}
-            <Row gutter={16} style={{ marginBottom: 16 }}>
-              <Col span={6}>
-                <Search
-                  placeholder="Run ID"
-                  value={filters.run_id}
-                  onChange={(e) => handleFilterChange('run_id', e.target.value)}
-                  onSearch={fetchDecisions}
-                  size="small"
-                />
-              </Col>
-              <Col span={6}>
-                <Input
-                  placeholder="Agent名称"
-                  value={filters.agent_name}
-                  onChange={(e) => handleFilterChange('agent_name', e.target.value)}
-                  size="small"
-                />
-              </Col>
-              <Col span={4}>
-                <Input
-                  placeholder="股票代码"
-                  value={filters.ticker}
-                  onChange={(e) => handleFilterChange('ticker', e.target.value)}
-                  size="small"
-                />
-              </Col>
-              <Col span={4}>
-                <Select
-                  placeholder="数量限制"
-                  value={filters.limit}
-                  onChange={(value) => handleFilterChange('limit', value)}
-                  size="small"
-                  style={{ width: '100%' }}
-                >
-                  <Option value={20}>20</Option>
-                  <Option value={50}>50</Option>
-                  <Option value={100}>100</Option>
-                  <Option value={200}>200</Option>
-                </Select>
-              </Col>
-              <Col span={4}>
-                <Space>
-                  <Button
-                    type="primary"
-                    icon={<SearchOutlined />}
-                    onClick={fetchDecisions}
-                    size="small"
-                  >
-                    搜索
-                  </Button>
-                  <Button onClick={clearFilters} size="small">
-                    清空
-                  </Button>
-                </Space>
-              </Col>
-            </Row>
+              <Button
+                type="link"
+                icon={<PictureOutlined />}
+                onClick={() => {
+                  // 查看回测图表
+                  message.info('回测图表功能开发中...');
+                }}
+                size="small"
+              >
+                查看图表
+              </Button>
+            </>
+          )}
+        </Space>
+      ),
+    },
+  ];
 
-            <Table
-              dataSource={decisions}
-              columns={decisionColumns}
-              rowKey="id"
-              loading={loading}
-              pagination={{
-                pageSize: 10,
-                showSizeChanger: false,
-                showQuickJumper: true,
-              }}
-              size="small"
-            />
-          </Card>
-        </Col>
-      </Row>
+  return (
+    <>
+      <Card
+        title={
+          <Space>
+            <DatabaseOutlined />
+            历史记录
+          </Space>
+        }
+        extra={
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={fetchCurrentTabData}
+            loading={loading}
+            size="small"
+          >
+            刷新
+          </Button>
+        }
+      >
+        <Tabs 
+          activeKey={activeTab} 
+          onChange={setActiveTab}
+          items={[
+            {
+              key: 'decisions',
+              label: (
+                <Space>
+                  <TrophyOutlined />
+                  <span>Agent决策历史</span>
+                  <Badge count={decisions.length} />
+                </Space>
+              ),
+              children: (
+                <div>
+                  {/* 过滤器 */}
+                  <Row gutter={16} style={{ marginBottom: 16 }}>
+                    <Col span={6}>
+                      <Search
+                        placeholder="Run ID"
+                        value={filters.run_id}
+                        onChange={(e) => handleFilterChange('run_id', e.target.value)}
+                        onSearch={fetchDecisions}
+                        size="small"
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Input
+                        placeholder="Agent名称"
+                        value={filters.agent_name}
+                        onChange={(e) => handleFilterChange('agent_name', e.target.value)}
+                        size="small"
+                      />
+                    </Col>
+                    <Col span={4}>
+                      <Input
+                        placeholder="股票代码"
+                        value={filters.ticker}
+                        onChange={(e) => handleFilterChange('ticker', e.target.value)}
+                        size="small"
+                      />
+                    </Col>
+                    <Col span={4}>
+                      <Select
+                        placeholder="数量限制"
+                        value={filters.limit}
+                        onChange={(value) => handleFilterChange('limit', value)}
+                        size="small"
+                        style={{ width: '100%' }}
+                      >
+                        <Option value={20}>20</Option>
+                        <Option value={50}>50</Option>
+                        <Option value={100}>100</Option>
+                        <Option value={200}>200</Option>
+                      </Select>
+                    </Col>
+                    <Col span={4}>
+                      <Space>
+                        <Button
+                          type="primary"
+                          icon={<SearchOutlined />}
+                          onClick={fetchDecisions}
+                          size="small"
+                        >
+                          搜索
+                        </Button>
+                        <Button onClick={clearFilters} size="small">
+                          清空
+                        </Button>
+                      </Space>
+                    </Col>
+                  </Row>
+
+                  <Table
+                    dataSource={decisions}
+                    columns={decisionColumns}
+                    rowKey="id"
+                    loading={loading}
+                    pagination={{
+                      pageSize: 10,
+                      showSizeChanger: false,
+                      showQuickJumper: true,
+                    }}
+                    size="small"
+                  />
+                </div>
+              )
+            },
+            {
+              key: 'analysis',
+              label: (
+                <Space>
+                  <FileTextOutlined />
+                  <span>股票分析历史</span>
+                  <Badge count={analysisHistory.length} />
+                </Space>
+              ),
+              children: (
+                <Table
+                  dataSource={analysisHistory}
+                  columns={analysisColumns}
+                  rowKey="task_id"
+                  loading={loading}
+                  pagination={{
+                    pageSize: 10,
+                    showSizeChanger: false,
+                    showQuickJumper: true,
+                  }}
+                  size="small"
+                />
+              )
+            },
+            {
+              key: 'backtest',
+              label: (
+                <Space>
+                  <BarChartOutlined />
+                  <span>回测历史</span>
+                  <Badge count={backtestHistory.length} />
+                </Space>
+              ),
+              children: (
+                <Table
+                  dataSource={backtestHistory}
+                  columns={backtestColumns}
+                  rowKey="task_id"
+                  loading={loading}
+                  pagination={{
+                    pageSize: 10,
+                    showSizeChanger: false,
+                    showQuickJumper: true,
+                  }}
+                  size="small"
+                />
+              )
+            }
+          ]}
+        />
+      </Card>
 
 
       {/* 决策详情模态框 */}
@@ -324,10 +663,18 @@ const HistoryDashboard: React.FC = () => {
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="置信度">
-                {selectedDecision.confidence_score 
-                  ? `${(selectedDecision.confidence_score * 100).toFixed(1)}%`
-                  : '-'
-                }
+                {(() => {
+                  const score = selectedDecision.confidence_score;
+                  if (score === null || score === undefined) return '-';
+                  if (typeof score === 'number') {
+                    if (score >= 0 && score <= 1) {
+                      return `${(score * 100).toFixed(1)}%`;
+                    } else if (score > 1 && score <= 100) {
+                      return `${score.toFixed(1)}%`;
+                    }
+                  }
+                  return score ? score.toString() : '-';
+                })()}
               </Descriptions.Item>
               <Descriptions.Item label="创建时间">
                 {selectedDecision.created_at 
@@ -370,9 +717,117 @@ const HistoryDashboard: React.FC = () => {
         )}
       </Modal>
 
+      {/* 分析详情模态框 */}
+      <Modal
+        title="分析任务详情"
+        open={analysisDetailModalVisible}
+        onCancel={() => setAnalysisDetailModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setAnalysisDetailModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+        width={800}
+      >
+        {selectedAnalysis && (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="任务ID">
+              <code>{selectedAnalysis.task_id}</code>
+            </Descriptions.Item>
+            <Descriptions.Item label="股票代码">
+              {selectedAnalysis.ticker}
+            </Descriptions.Item>
+            <Descriptions.Item label="状态">
+              <Tag color={getStatusColor(selectedAnalysis.status)}>
+                {selectedAnalysis.status?.toUpperCase() || 'UNKNOWN'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {selectedAnalysis.created_at 
+                ? moment(selectedAnalysis.created_at).format('YYYY-MM-DD HH:mm:ss')
+                : '-'
+              }
+            </Descriptions.Item>
+            <Descriptions.Item label="完成时间">
+              {selectedAnalysis.completed_at 
+                ? moment(selectedAnalysis.completed_at).format('YYYY-MM-DD HH:mm:ss')
+                : '-'
+              }
+            </Descriptions.Item>
+            {selectedAnalysis.error_message && (
+              <Descriptions.Item label="错误信息">
+                <Text type="danger">{selectedAnalysis.error_message}</Text>
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        )}
+      </Modal>
+
+      {/* 回测详情模态框 */}
+      <Modal
+        title="回测任务详情"
+        open={backtestDetailModalVisible}
+        onCancel={() => setBacktestDetailModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setBacktestDetailModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+        width={800}
+      >
+        {selectedBacktest && (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="任务ID">
+              <code>{selectedBacktest.task_id}</code>
+            </Descriptions.Item>
+            <Descriptions.Item label="股票代码">
+              {selectedBacktest.ticker}
+            </Descriptions.Item>
+            <Descriptions.Item label="回测期间">
+              {selectedBacktest.start_date} 至 {selectedBacktest.end_date}
+            </Descriptions.Item>
+            <Descriptions.Item label="状态">
+              <Tag color={getStatusColor(selectedBacktest.status)}>
+                {selectedBacktest.status?.toUpperCase() || 'UNKNOWN'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {selectedBacktest.created_at 
+                ? moment(selectedBacktest.created_at).format('YYYY-MM-DD HH:mm:ss')
+                : '-'
+              }
+            </Descriptions.Item>
+            <Descriptions.Item label="完成时间">
+              {selectedBacktest.completed_at 
+                ? moment(selectedBacktest.completed_at).format('YYYY-MM-DD HH:mm:ss')
+                : '-'
+              }
+            </Descriptions.Item>
+            {selectedBacktest.parameters && (
+              <Descriptions.Item label="参数配置">
+                <pre style={{ 
+                  background: '#f5f5f5', 
+                  padding: '8px', 
+                  fontSize: '12px',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  {JSON.stringify(selectedBacktest.parameters, null, 2)}
+                </pre>
+              </Descriptions.Item>
+            )}
+            {selectedBacktest.error_message && (
+              <Descriptions.Item label="错误信息">
+                <Text type="danger">{selectedBacktest.error_message}</Text>
+              </Descriptions.Item>
+            )}
+          </Descriptions>
+        )}
+      </Modal>
+
       {/* 格式化决策显示模态框 */}
       <Modal
-        title="格式化决策显示"
+        title="格式化显示"
         open={formattedModalVisible}
         onCancel={() => setFormattedModalVisible(false)}
         footer={[

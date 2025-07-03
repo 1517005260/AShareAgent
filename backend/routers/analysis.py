@@ -37,11 +37,23 @@ def execute_stock_analysis_with_user(request, run_id: str, user_id: int, db_mana
         SET status = ?, completed_at = ?, result = ? 
         WHERE task_id = ?
         """
-        result_json = json.dumps(serialize_for_api(result)) if result else None
+        # 确保结果被正确序列化和保存
+        if result:
+            try:
+                result_json = json.dumps(serialize_for_api(result))
+                logger.info(f"分析结果序列化成功，大小: {len(result_json)} 字符")
+            except Exception as e:
+                logger.error(f"分析结果序列化失败: {e}")
+                result_json = json.dumps({"error": "序列化失败", "message": str(e)})
+        else:
+            logger.warning(f"分析任务 {run_id} 返回空结果")
+            result_json = json.dumps({"error": "分析结果为空", "message": "分析完成但未返回结果"})
         
         with db_manager.get_connection() as conn:
             conn.execute(update_query, ("completed", datetime.now(), result_json, run_id))
             conn.commit()
+            
+        logger.info(f"分析任务 {run_id} 状态已更新为completed")
         
         return result
         
@@ -352,6 +364,20 @@ async def get_analysis_result(
         if task_data["result"]:
             try:
                 stored_result = json.loads(task_data["result"])
+                
+                # 检查是否是错误结果
+                if isinstance(stored_result, dict) and "error" in stored_result:
+                    return ApiResponse(
+                        success=False,
+                        message=f"分析失败: {stored_result.get('message', '未知错误')}",
+                        data={
+                            "task_id": task_data["task_id"],
+                            "ticker": task_data["ticker"],
+                            "completion_time": task_data["completed_at"],
+                            "error": stored_result
+                        }
+                    )
+                
                 return ApiResponse(
                     success=True,
                     message="获取分析结果成功",
@@ -362,8 +388,18 @@ async def get_analysis_result(
                         "result": stored_result
                     }
                 )
-            except json.JSONDecodeError:
-                logger.error(f"解析存储的分析结果失败: {run_id}")
+            except json.JSONDecodeError as e:
+                logger.error(f"解析存储的分析结果失败: {run_id}, 错误: {e}")
+                return ApiResponse(
+                    success=False,
+                    message="分析结果数据格式错误",
+                    data={
+                        "task_id": task_data["task_id"],
+                        "ticker": task_data["ticker"],
+                        "completion_time": task_data["completed_at"],
+                        "error": {"message": "数据格式错误", "details": str(e)}
+                    }
+                )
         
         # 如果数据库中没有结果，尝试从内存获取
         task = api_state.get_analysis_task(run_id)

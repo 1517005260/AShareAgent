@@ -68,6 +68,21 @@ class StockAnalysisRequest(BaseModel):
         ge=0,
         example=0
     )
+    start_date: Optional[str] = Field(
+        None,
+        description="分析开始日期 (YYYY-MM-DD)，为空则使用默认值（一年前）",
+        example="2024-01-01"
+    )
+    end_date: Optional[str] = Field(
+        None,
+        description="分析结束日期 (YYYY-MM-DD)，为空则使用默认值（昨天）",
+        example="2024-12-31"
+    )
+    show_summary: bool = Field(
+        False,
+        description="是否显示详细摘要报告",
+        example=False
+    )
 
     class Config:
         json_schema_extra = {
@@ -189,6 +204,35 @@ class BacktestRequest(BaseModel):
             "macro": "weekly",
             "portfolio": "daily"
         }
+    )
+    time_granularity: Optional[str] = Field(
+        "daily",
+        description="时间细粒度：minute/hourly/daily/weekly",
+        example="daily"
+    )
+    benchmark_type: Optional[str] = Field(
+        "spe",
+        description="基准策略类型：spe/csi300/equal_weight/momentum/mean_reversion",
+        example="spe"
+    )
+    rebalance_frequency: Optional[str] = Field(
+        "daily",
+        description="调仓频率：daily/weekly/monthly/quarterly",
+        example="daily"
+    )
+    transaction_cost: Optional[float] = Field(
+        0.001,
+        description="交易手续费率（小数形式）",
+        ge=0,
+        le=0.01,
+        example=0.001
+    )
+    slippage: Optional[float] = Field(
+        0.0005,
+        description="滑点率（小数形式）",
+        ge=0,
+        le=0.005,
+        example=0.0005
     )
     
     class Config:

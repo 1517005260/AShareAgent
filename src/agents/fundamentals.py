@@ -169,8 +169,9 @@ def fundamentals_agent(state: AgentState):
     # Print the reasoning if the flag is set
     if show_reasoning:
         show_agent_reasoning(message_content, "Fundamental Analysis Agent")
-        # 保存推理信息到metadata供API使用
-        state["metadata"]["agent_reasoning"] = message_content
+    
+    # 始终保存推理信息到metadata供API使用
+    state["metadata"]["agent_reasoning"] = message_content
 
     show_workflow_status("Fundamentals Analyst", "completed")
     # logger.info(f"--- DEBUG: fundamentals_agent RETURN messages: {[msg.name for msg in [message]]} ---")

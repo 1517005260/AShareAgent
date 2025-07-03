@@ -17,6 +17,25 @@ from ..dependencies import get_log_storage
 logger = logging.getLogger("analysis_service")
 
 
+def _map_agent_name(agent_name: str) -> str:
+    """Map internal agent names to frontend expected names"""
+    mapping = {
+        "technical_analyst_agent": "technical_analyst",
+        "fundamentals_agent": "fundamentals", 
+        "sentiment_agent": "sentiment",
+        "valuation_agent": "valuation",
+        "researcher_bull_agent": "researcher_bull",
+        "researcher_bear_agent": "researcher_bear",
+        "risk_management_agent": "risk_management",
+        "portfolio_management_agent": "portfolio_management",
+        "market_data_agent": "market_data",
+        "macro_analyst_agent": "macro_analyst",
+        "macro_news_agent": "macro_news",
+        "debate_room_agent": "debate_room"
+    }
+    return mapping.get(agent_name, agent_name)
+
+
 def execute_stock_analysis(request: StockAnalysisRequest, run_id: str) -> Dict[str, Any]:
     """执行股票分析任务"""
     from src.main import run_hedge_fund  # 避免循环导入
@@ -47,25 +66,88 @@ def execute_stock_analysis(request: StockAnalysisRequest, run_id: str) -> Dict[s
         # 还不添加到存储，等待工作流完成后再更新
 
         with workflow_run(run_id):
-            result = run_hedge_fund(
+            # Execute the analysis workflow  
+            raw_result = run_hedge_fund(
                 run_id=run_id,
                 ticker=request.ticker,
-                start_date=None,  # 使用系统默认值
-                end_date=None,    # 使用系统默认值
+                start_date=request.start_date,  # 使用用户指定日期或None(系统默认)
+                end_date=request.end_date,      # 使用用户指定日期或None(系统默认)
                 portfolio=portfolio,
                 show_reasoning=request.show_reasoning,
-                num_of_news=request.num_of_news
+                num_of_news=request.num_of_news,
+                show_summary=request.show_summary
             )
 
-            # 更新工作流日志的结束时间和输出状态
-            # workflow_log.timestamp_end = datetime.now(UTC)
-            # workflow_log.output_state = result
+        # Collect agent results from api_state AFTER workflow completes
+        agent_results = {}
+        run_info = api_state.get_run(run_id)
+        
+        # Get all available agents from api_state
+        all_agents = api_state.get_all_agent_data()
+        logger.info(f"Available agents: {list(all_agents.keys())}")
+        
+        # Get agents that participated in this run
+        if run_info and run_info.agents:
+            logger.info(f"Agents that participated in run {run_id}: {run_info.agents}")
+            
+            for agent_name in run_info.agents:
+                agent_data = all_agents.get(agent_name)
+                if agent_data and "latest" in agent_data and agent_data["latest"].get("reasoning"):
+                    try:
+                        from ..utils.api_utils import safe_parse_json, serialize_for_api
+                        reasoning_data = agent_data["latest"]["reasoning"]
+                        
+                        # If reasoning_data is a string, try to parse it as JSON
+                        if isinstance(reasoning_data, str):
+                            reasoning_data = safe_parse_json(reasoning_data)
+                        
+                        # Map agent names to expected frontend names
+                        frontend_name = _map_agent_name(agent_name)
+                        agent_results[frontend_name] = serialize_for_api(reasoning_data)
+                        logger.info(f"Successfully collected data from agent: {agent_name} -> {frontend_name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to process agent {agent_name} data: {e}")
+        else:
+            # Fallback: check all agents if run_info doesn't have agent list
+            logger.warning(f"No agent list found in run_info for {run_id}, checking all agents")
+            for agent_name, agent_data in all_agents.items():
+                if agent_data and "latest" in agent_data and agent_data["latest"].get("reasoning"):
+                    # Check if this agent participated in the current run by checking timestamp
+                    try:
+                        from ..utils.api_utils import safe_parse_json, serialize_for_api
+                        reasoning_data = agent_data["latest"]["reasoning"]
+                        
+                        # If reasoning_data is a string, try to parse it as JSON
+                        if isinstance(reasoning_data, str):
+                            reasoning_data = safe_parse_json(reasoning_data)
+                        
+                        # Map agent names to expected frontend names
+                        frontend_name = _map_agent_name(agent_name)
+                        agent_results[frontend_name] = serialize_for_api(reasoning_data)
+                        logger.info(f"Successfully collected data from agent: {agent_name} -> {frontend_name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to process agent {agent_name} data: {e}")
+        
+        logger.info(f"Collected agent results: {list(agent_results.keys())}")
+        
+        # Log detailed agent results for debugging
+        for agent_name, result in agent_results.items():
+            logger.info(f"Agent {agent_name} result keys: {list(result.keys()) if isinstance(result, dict) else type(result)}")
 
-            # 添加到日志存储
-            # log_storage.add_agent_log(workflow_log)
+        # Structure the result properly for frontend
+        structured_result = {
+            "ticker": request.ticker,
+            "run_id": run_id,
+            "final_decision": raw_result,
+            "agent_results": agent_results,
+            "completion_time": datetime.now(UTC).isoformat()
+        }
+        
+        logger.info(f"Final structured result keys: {list(structured_result.keys())}")
+        logger.info(f"Agent results count: {len(agent_results)}")
 
         logger.info(f"股票分析任务完成 (运行ID: {run_id})")
-        return result
+        return structured_result
     except Exception as e:
         logger.error(f"股票分析任务失败: {str(e)}")
 

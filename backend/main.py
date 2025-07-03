@@ -34,8 +34,8 @@ async def startup_event():
         logger.info("Initializing agents in database...")
         
         # 导入并运行agent初始化脚本
-        from scripts.init_agents import init_default_agents
-        init_default_agents()
+        from scripts.init_system import init_agents
+        init_agents()
         
         logger.info("Agents initialized successfully")
     except Exception as e:

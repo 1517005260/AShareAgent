@@ -1,5 +1,34 @@
 import React, { useState, useEffect } from 'react';
+import {
+  Card,
+  Button,
+  Table,
+  Modal,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  message,
+  Tabs,
+  Row,
+  Col,
+  Tag,
+  Space,
+  Descriptions,
+  Alert
+} from 'antd';
+import {
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  TransactionOutlined,
+  DollarOutlined,
+  TrophyOutlined,
+} from '@ant-design/icons';
 import { ApiService } from '../services/api';
+
+const { TextArea } = Input;
+const { Option } = Select;
 
 interface Portfolio {
   id: number;
@@ -41,33 +70,16 @@ const PortfolioManagement: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
-  // 创建组合表单
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [createFormData, setCreateFormData] = useState({
-    name: '',
-    description: '',
-    initial_capital: 100000,
-    risk_level: 'medium'
-  });
+  // 模态框状态
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [transactionModalVisible, setTransactionModalVisible] = useState(false);
 
-  // 编辑组合表单
-  const [showEditForm, setShowEditForm] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    name: '',
-    description: '',
-    risk_level: 'medium'
-  });
-
-  // 添加交易表单
-  const [showTransactionForm, setShowTransactionForm] = useState(false);
-  const [transactionFormData, setTransactionFormData] = useState({
-    ticker: '',
-    transaction_type: 'buy' as 'buy' | 'sell',
-    quantity: 0,
-    price: 0
-  });
+  // 表单实例
+  const [createForm] = Form.useForm();
+  const [editForm] = Form.useForm();
+  const [transactionForm] = Form.useForm();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'holdings' | 'transactions'>('overview');
 
@@ -120,115 +132,88 @@ const PortfolioManagement: React.FC = () => {
     }
   };
 
-  const handleCreatePortfolio = async () => {
+  const handleCreatePortfolio = async (values: any) => {
     try {
       setLoading(true);
-      setError(null);
-      setSuccess(null);
-
-      const response = await ApiService.createPortfolio(createFormData);
+      const response = await ApiService.createPortfolio(values);
       if (response.success && response.data) {
-        setSuccess('投资组合创建成功');
-        setShowCreateForm(false);
-        setCreateFormData({
-          name: '',
-          description: '',
-          initial_capital: 100000,
-          risk_level: 'medium'
-        });
+        message.success('投资组合创建成功');
+        setCreateModalVisible(false);
+        createForm.resetFields();
         await loadPortfolios();
       } else {
-        setError(response.message || '创建失败');
+        message.error(response.message || '创建失败');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || '创建失败');
+      message.error(err.response?.data?.message || '创建失败');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdatePortfolio = async () => {
+  const handleUpdatePortfolio = async (values: any) => {
     if (!selectedPortfolio) return;
 
     try {
       setLoading(true);
-      setError(null);
-      setSuccess(null);
-
-      const response = await ApiService.updatePortfolio(selectedPortfolio.id, editFormData);
+      const response = await ApiService.updatePortfolio(selectedPortfolio.id, values);
       if (response.success && response.data) {
-        setSuccess('投资组合更新成功');
-        setShowEditForm(false);
+        message.success('投资组合更新成功');
+        setEditModalVisible(false);
+        editForm.resetFields();
         await loadPortfolios();
-        // 更新选中的组合
-        const updatedPortfolio = portfolios.find(p => p.id === selectedPortfolio.id);
-        if (updatedPortfolio) {
-          setSelectedPortfolio(updatedPortfolio);
-        }
+        setSelectedPortfolio(response.data);
       } else {
-        setError(response.message || '更新失败');
+        message.error(response.message || '更新失败');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || '更新失败');
+      message.error(err.response?.data?.message || '更新失败');
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeletePortfolio = async (portfolioId: number) => {
-    if (!confirm('确定要删除这个投资组合吗？')) return;
-
     try {
       setLoading(true);
-      setError(null);
-      setSuccess(null);
-
       const response = await ApiService.deletePortfolio(portfolioId);
       if (response.success) {
-        setSuccess('投资组合删除成功');
+        message.success('投资组合删除成功');
         await loadPortfolios();
         if (selectedPortfolio?.id === portfolioId) {
           setSelectedPortfolio(portfolios[0] || null);
         }
       } else {
-        setError(response.message || '删除失败');
+        message.error(response.message || '删除失败');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || '删除失败');
+      message.error(err.response?.data?.message || '删除失败');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddTransaction = async () => {
+  const handleAddTransaction = async (values: any) => {
     if (!selectedPortfolio) return;
 
     try {
       setLoading(true);
-      setError(null);
-      setSuccess(null);
-
       const response = await ApiService.addTransaction(selectedPortfolio.id, {
-        ...transactionFormData,
-        total_amount: transactionFormData.quantity * transactionFormData.price
+        ...values,
+        total_amount: values.quantity * values.price
       });
 
       if (response.success) {
-        setSuccess('交易记录添加成功');
-        setShowTransactionForm(false);
-        setTransactionFormData({
-          ticker: '',
-          transaction_type: 'buy',
-          quantity: 0,
-          price: 0
-        });
+        message.success('交易记录添加成功');
+        setTransactionModalVisible(false);
+        transactionForm.resetFields();
         await loadPortfolioDetails();
-        await loadPortfolios(); // 刷新组合数据
+        await loadPortfolios();
       } else {
-        setError(response.message || '添加交易记录失败');
+        message.error(response.message || '添加交易记录失败');
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || '添加交易记录失败');
+      message.error(err.response?.data?.message || '添加交易记录失败');
     } finally {
       setLoading(false);
     }
@@ -245,571 +230,535 @@ const PortfolioManagement: React.FC = () => {
     return `${(value * 100).toFixed(2)}%`;
   };
 
+  const getReturnColor = (value: number) => {
+    return value >= 0 ? 'success' : 'error';
+  };
+
+  const holdingsColumns = [
+    {
+      title: '股票代码',
+      dataIndex: 'ticker',
+      key: 'ticker',
+    },
+    {
+      title: '持仓数量',
+      dataIndex: 'quantity',
+      key: 'quantity',
+    },
+    {
+      title: '平均成本',
+      dataIndex: 'average_price',
+      key: 'average_price',
+      render: (value: number) => formatCurrency(value),
+    },
+    {
+      title: '当前价格',
+      dataIndex: 'current_price',
+      key: 'current_price',
+      render: (value: number) => formatCurrency(value),
+    },
+    {
+      title: '市值',
+      dataIndex: 'market_value',
+      key: 'market_value',
+      render: (value: number) => formatCurrency(value),
+    },
+    {
+      title: '盈亏',
+      key: 'pnl',
+      render: (record: Holding) => (
+        <Space direction="vertical" size="small">
+          <Tag color={getReturnColor(record.unrealized_pnl)}>
+            {formatCurrency(record.unrealized_pnl)}
+          </Tag>
+          <Tag color={getReturnColor(record.unrealized_pnl_percent)}>
+            {formatPercent(record.unrealized_pnl_percent)}
+          </Tag>
+        </Space>
+      ),
+    },
+  ];
+
+  const transactionsColumns = [
+    {
+      title: '交易时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (date: string) => new Date(date).toLocaleDateString('zh-CN'),
+    },
+    {
+      title: '股票代码',
+      dataIndex: 'ticker',
+      key: 'ticker',
+    },
+    {
+      title: '交易类型',
+      dataIndex: 'transaction_type',
+      key: 'transaction_type',
+      render: (type: string) => (
+        <Tag color={type === 'buy' ? 'green' : 'red'}>
+          {type === 'buy' ? '买入' : '卖出'}
+        </Tag>
+      ),
+    },
+    {
+      title: '数量',
+      dataIndex: 'quantity',
+      key: 'quantity',
+    },
+    {
+      title: '价格',
+      dataIndex: 'price',
+      key: 'price',
+      render: (value: number) => formatCurrency(value),
+    },
+    {
+      title: '总金额',
+      dataIndex: 'total_amount',
+      key: 'total_amount',
+      render: (value: number) => formatCurrency(value),
+    },
+  ];
+
   if (loading && portfolios.length === 0) {
     return (
-      <div className="flex justify-center items-center p-8">
-        <div className="text-lg">加载中...</div>
+      <div style={{ textAlign: 'center', padding: '50px' }}>
+        <div>加载中...</div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold">投资组合管理</h2>
-        <button
-          onClick={() => setShowCreateForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          创建新组合
-        </button>
-      </div>
-
+    <div style={{ padding: '24px' }}>
       {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-          {error}
-        </div>
+        <Alert
+          message={error}
+          type="error"
+          closable
+          onClose={() => setError(null)}
+          style={{ marginBottom: 16 }}
+        />
       )}
 
-      {success && (
-        <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
-          {success}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <Row gutter={16}>
         {/* 左侧组合列表 */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-lg font-semibold mb-4">我的组合</h3>
-            
+        <Col span={6}>
+          <Card
+            title="我的投资组合"
+            extra={
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={() => setCreateModalVisible(true)}
+              >
+                创建
+              </Button>
+            }
+          >
             {portfolios.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
+              <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
                 暂无投资组合
               </div>
             ) : (
-              <div className="space-y-2">
+              <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
                 {portfolios.map((portfolio) => (
-                  <div
+                  <Card
                     key={portfolio.id}
+                    size="small"
+                    hoverable
                     onClick={() => setSelectedPortfolio(portfolio)}
-                    className={`p-3 rounded border cursor-pointer hover:bg-gray-50 ${
-                      selectedPortfolio?.id === portfolio.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200'
-                    }`}
+                    style={{
+                      marginBottom: 8,
+                      border: selectedPortfolio?.id === portfolio.id ? '2px solid #1890ff' : '1px solid #d9d9d9'
+                    }}
                   >
-                    <div className="font-medium">{portfolio.name}</div>
-                    <div className="text-sm text-gray-600">
-                      {formatCurrency(portfolio.current_value)}
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{portfolio.name}</div>
+                      <div style={{ color: '#666', fontSize: '12px' }}>{portfolio.description}</div>
                     </div>
-                    <div className="text-xs text-gray-400">
-                      风险等级: {portfolio.risk_level}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                      <span>当前价值: {formatCurrency(portfolio.current_value)}</span>
+                      <Tag color={portfolio.risk_level === 'high' ? 'red' : portfolio.risk_level === 'medium' ? 'orange' : 'green'}>
+                        {portfolio.risk_level === 'high' ? '高风险' : portfolio.risk_level === 'medium' ? '中风险' : '低风险'}
+                      </Tag>
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             )}
-          </div>
-        </div>
+          </Card>
+        </Col>
 
         {/* 右侧详情区域 */}
-        <div className="lg:col-span-3">
+        <Col span={18}>
           {selectedPortfolio ? (
             <>
-              {/* 组合概览 */}
-              <div className="bg-white rounded-lg shadow p-6 mb-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-semibold">{selectedPortfolio.name}</h3>
-                    <p className="text-gray-600">{selectedPortfolio.description}</p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
+              {/* 组合概览卡片 */}
+              <Card
+                style={{ marginBottom: 16 }}
+                title={
+                  <Space>
+                    <TrophyOutlined />
+                    {selectedPortfolio.name}
+                  </Space>
+                }
+                extra={
+                  <Space>
+                    <Button
+                      icon={<EditOutlined />}
                       onClick={() => {
-                        setEditFormData({
+                        editForm.setFieldsValue({
                           name: selectedPortfolio.name,
-                          description: selectedPortfolio.description || '',
-                          risk_level: selectedPortfolio.risk_level || 'medium'
+                          description: selectedPortfolio.description,
+                          risk_level: selectedPortfolio.risk_level
                         });
-                        setShowEditForm(true);
+                        setEditModalVisible(true);
                       }}
-                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                     >
                       编辑
-                    </button>
-                    <button
-                      onClick={() => handleDeletePortfolio(selectedPortfolio.id)}
-                      className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                    </Button>
+                    <Button
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={() => {
+                        Modal.confirm({
+                          title: '确认删除',
+                          content: `确定要删除投资组合 "${selectedPortfolio.name}" 吗？`,
+                          onOk: () => handleDeletePortfolio(selectedPortfolio.id),
+                        });
+                      }}
                     >
                       删除
-                    </button>
-                  </div>
-                </div>
+                    </Button>
+                  </Space>
+                }
+              >
+                <Row gutter={16}>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#52c41a' }}>
+                        {formatCurrency(selectedPortfolio.current_value)}
+                      </div>
+                      <div style={{ color: '#666' }}>当前价值</div>
+                    </div>
+                  </Col>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>
+                        {formatCurrency(selectedPortfolio.initial_capital)}
+                      </div>
+                      <div style={{ color: '#666' }}>初始资金</div>
+                    </div>
+                  </Col>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#722ed1' }}>
+                        {formatCurrency(selectedPortfolio.cash_balance)}
+                      </div>
+                      <div style={{ color: '#666' }}>现金余额</div>
+                    </div>
+                  </Col>
+                  <Col span={6}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{
+                        fontSize: '24px',
+                        fontWeight: 'bold',
+                        color: selectedPortfolio.current_value >= selectedPortfolio.initial_capital ? '#52c41a' : '#ff4d4f'
+                      }}>
+                        {formatPercent((selectedPortfolio.current_value - selectedPortfolio.initial_capital) / selectedPortfolio.initial_capital)}
+                      </div>
+                      <div style={{ color: '#666' }}>总收益率</div>
+                    </div>
+                  </Col>
+                </Row>
+              </Card>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">
-                      {formatCurrency(selectedPortfolio.current_value)}
-                    </div>
-                    <div className="text-sm text-gray-600">当前价值</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">
-                      {formatCurrency(selectedPortfolio.initial_capital)}
-                    </div>
-                    <div className="text-sm text-gray-600">初始资金</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-purple-600">
-                      {formatCurrency(selectedPortfolio.cash_balance)}
-                    </div>
-                    <div className="text-sm text-gray-600">现金余额</div>
-                  </div>
-                  <div className="text-center">
-                    <div className={`text-2xl font-bold ${
-                      selectedPortfolio.current_value >= selectedPortfolio.initial_capital
-                        ? 'text-green-600'
-                        : 'text-red-600'
-                    }`}>
-                      {formatPercent(
-                        (selectedPortfolio.current_value - selectedPortfolio.initial_capital) / 
-                        selectedPortfolio.initial_capital
-                      )}
-                    </div>
-                    <div className="text-sm text-gray-600">总收益率</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 标签页 */}
-              <div className="bg-white rounded-lg shadow">
-                <div className="border-b">
-                  <nav className="flex space-x-8 px-6">
-                    {[
-                      { key: 'overview', label: '概览' },
-                      { key: 'holdings', label: '持仓' },
-                      { key: 'transactions', label: '交易记录' }
-                    ].map((tab) => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setActiveTab(tab.key as any)}
-                        className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                          activeTab === tab.key
-                            ? 'border-blue-500 text-blue-600'
-                            : 'border-transparent text-gray-500 hover:text-gray-700'
-                        }`}
+              {/* 详情标签页 */}
+              <Card>
+                <Tabs
+                  activeKey={activeTab}
+                  onChange={(key) => setActiveTab(key as any)}
+                  tabBarExtraContent={
+                    activeTab === 'holdings' ? (
+                      <Button
+                        type="primary"
+                        icon={<TransactionOutlined />}
+                        onClick={() => setTransactionModalVisible(true)}
                       >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </nav>
-                </div>
-
-                <div className="p-6">
-                  {activeTab === 'overview' && (
-                    <div>
-                      <h4 className="text-lg font-semibold mb-4">组合概览</h4>
-                      <div className="text-gray-600">
-                        <p>创建时间: {new Date(selectedPortfolio.created_at).toLocaleDateString('zh-CN')}</p>
-                        <p>最后更新: {new Date(selectedPortfolio.updated_at).toLocaleDateString('zh-CN')}</p>
-                        <p>风险等级: {selectedPortfolio.risk_level}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {activeTab === 'holdings' && (
-                    <div>
-                      <div className="flex justify-between items-center mb-4">
-                        <h4 className="text-lg font-semibold">持仓详情</h4>
-                        <button
-                          onClick={() => setShowTransactionForm(true)}
-                          className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                        >
-                          添加交易
-                        </button>
-                      </div>
-                      
-                      {holdings.length === 0 ? (
-                        <div className="text-center text-gray-500 py-8">
-                          暂无持仓
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  股票代码
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  持仓数量
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  平均成本
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  当前价格
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  市值
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  盈亏
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                              {holdings.map((holding) => (
-                                <tr key={holding.id}>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {holding.ticker}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {holding.quantity}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {formatCurrency(holding.average_price)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {formatCurrency(holding.current_price)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {formatCurrency(holding.market_value)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                    <span className={holding.unrealized_pnl >= 0 ? 'text-green-600' : 'text-red-600'}>
-                                      {formatCurrency(holding.unrealized_pnl)} 
-                                      ({formatPercent(holding.unrealized_pnl_percent)})
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {activeTab === 'transactions' && (
-                    <div>
-                      <h4 className="text-lg font-semibold mb-4">交易记录</h4>
-                      
-                      {transactions.length === 0 ? (
-                        <div className="text-center text-gray-500 py-8">
-                          暂无交易记录
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  交易时间
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  股票代码
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  交易类型
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  数量
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  价格
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  总金额
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                              {transactions.map((transaction) => (
-                                <tr key={transaction.id}>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {new Date(transaction.created_at).toLocaleDateString('zh-CN')}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                    {transaction.ticker}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                    <span className={`px-2 py-1 text-xs rounded-full ${
-                                      transaction.transaction_type === 'buy'
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-red-100 text-red-800'
-                                    }`}>
-                                      {transaction.transaction_type === 'buy' ? '买入' : '卖出'}
-                                    </span>
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {transaction.quantity}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {formatCurrency(transaction.price)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {formatCurrency(transaction.total_amount)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
+                        添加交易
+                      </Button>
+                    ) : null
+                  }
+                  items={[
+                    {
+                      key: 'overview',
+                      label: '概览',
+                      children: (
+                        <Descriptions bordered column={2}>
+                          <Descriptions.Item label="创建时间">
+                            {new Date(selectedPortfolio.created_at).toLocaleDateString('zh-CN')}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="最后更新">
+                            {new Date(selectedPortfolio.updated_at).toLocaleDateString('zh-CN')}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="风险等级">
+                            <Tag color={selectedPortfolio.risk_level === 'high' ? 'red' : selectedPortfolio.risk_level === 'medium' ? 'orange' : 'green'}>
+                              {selectedPortfolio.risk_level === 'high' ? '高风险' : selectedPortfolio.risk_level === 'medium' ? '中风险' : '低风险'}
+                            </Tag>
+                          </Descriptions.Item>
+                          <Descriptions.Item label="描述" span={2}>
+                            {selectedPortfolio.description || '暂无描述'}
+                          </Descriptions.Item>
+                        </Descriptions>
+                      ),
+                    },
+                    {
+                      key: 'holdings',
+                      label: `持仓 (${holdings.length})`,
+                      children: (
+                        <Table
+                          dataSource={holdings}
+                          columns={holdingsColumns}
+                          rowKey="id"
+                          pagination={false}
+                          locale={{ emptyText: '暂无持仓' }}
+                        />
+                      ),
+                    },
+                    {
+                      key: 'transactions',
+                      label: `交易记录 (${transactions.length})`,
+                      children: (
+                        <Table
+                          dataSource={transactions}
+                          columns={transactionsColumns}
+                          rowKey="id"
+                          pagination={{ pageSize: 10 }}
+                          locale={{ emptyText: '暂无交易记录' }}
+                        />
+                      ),
+                    },
+                  ]}
+                />
+              </Card>
             </>
           ) : (
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="text-center text-gray-500 py-8">
-                请选择一个投资组合查看详情
+            <Card>
+              <div style={{ textAlign: 'center', padding: '60px', color: '#999' }}>
+                <DollarOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
+                <div>请选择一个投资组合查看详情</div>
               </div>
-            </div>
+            </Card>
           )}
-        </div>
-      </div>
+        </Col>
+      </Row>
 
       {/* 创建组合模态框 */}
-      {showCreateForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">创建投资组合</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  组合名称
-                </label>
-                <input
-                  type="text"
-                  value={createFormData.name}
-                  onChange={(e) => setCreateFormData({ ...createFormData, name: e.target.value })}
-                  placeholder="请输入组合名称"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
+      <Modal
+        title="创建投资组合"
+        open={createModalVisible}
+        onCancel={() => {
+          setCreateModalVisible(false);
+          createForm.resetFields();
+        }}
+        footer={null}
+        width={500}
+      >
+        <Form
+          form={createForm}
+          layout="vertical"
+          onFinish={handleCreatePortfolio}
+          initialValues={{
+            initial_capital: 100000,
+            risk_level: 'medium'
+          }}
+        >
+          <Form.Item
+            name="name"
+            label="组合名称"
+            rules={[{ required: true, message: '请输入组合名称' }]}
+          >
+            <Input placeholder="请输入组合名称" />
+          </Form.Item>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  组合描述
-                </label>
-                <textarea
-                  value={createFormData.description}
-                  onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
-                  placeholder="请输入组合描述"
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
+          <Form.Item
+            name="description"
+            label="组合描述"
+          >
+            <TextArea rows={3} placeholder="请输入组合描述" />
+          </Form.Item>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  初始资金
-                </label>
-                <input
-                  type="number"
-                  value={createFormData.initial_capital}
-                  onChange={(e) => setCreateFormData({ ...createFormData, initial_capital: Number(e.target.value) })}
-                  placeholder="请输入初始资金"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
+          <Form.Item
+            name="initial_capital"
+            label="初始资金"
+            rules={[{ required: true, message: '请输入初始资金' }]}
+          >
+            <InputNumber
+              min={1000}
+              max={10000000}
+              step={1000}
+              formatter={value => `￥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={value => value!.replace(/￥\s?|(,*)/g, '') as any}
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  风险等级
-                </label>
-                <select
-                  value={createFormData.risk_level}
-                  onChange={(e) => setCreateFormData({ ...createFormData, risk_level: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="low">低风险</option>
-                  <option value="medium">中等风险</option>
-                  <option value="high">高风险</option>
-                </select>
-              </div>
-            </div>
+          <Form.Item
+            name="risk_level"
+            label="风险等级"
+          >
+            <Select>
+              <Option value="low">低风险</Option>
+              <Option value="medium">中等风险</Option>
+              <Option value="high">高风险</Option>
+            </Select>
+          </Form.Item>
 
-            <div className="mt-6 flex space-x-2">
-              <button
-                onClick={handleCreatePortfolio}
-                disabled={loading || !createFormData.name}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? '创建中...' : '创建'}
-              </button>
-              <button
-                onClick={() => setShowCreateForm(false)}
-                className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-              >
+          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setCreateModalVisible(false);
+                createForm.resetFields();
+              }}>
                 取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Button>
+              <Button type="primary" htmlType="submit" loading={loading}>
+                创建
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* 编辑组合模态框 */}
-      {showEditForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">编辑投资组合</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  组合名称
-                </label>
-                <input
-                  type="text"
-                  value={editFormData.name}
-                  onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                  placeholder="请输入组合名称"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
+      <Modal
+        title="编辑投资组合"
+        open={editModalVisible}
+        onCancel={() => {
+          setEditModalVisible(false);
+          editForm.resetFields();
+        }}
+        footer={null}
+        width={500}
+      >
+        <Form
+          form={editForm}
+          layout="vertical"
+          onFinish={handleUpdatePortfolio}
+        >
+          <Form.Item
+            name="name"
+            label="组合名称"
+            rules={[{ required: true, message: '请输入组合名称' }]}
+          >
+            <Input placeholder="请输入组合名称" />
+          </Form.Item>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  组合描述
-                </label>
-                <textarea
-                  value={editFormData.description}
-                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                  placeholder="请输入组合描述"
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
+          <Form.Item
+            name="description"
+            label="组合描述"
+          >
+            <TextArea rows={3} placeholder="请输入组合描述" />
+          </Form.Item>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  风险等级
-                </label>
-                <select
-                  value={editFormData.risk_level}
-                  onChange={(e) => setEditFormData({ ...editFormData, risk_level: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="low">低风险</option>
-                  <option value="medium">中等风险</option>
-                  <option value="high">高风险</option>
-                </select>
-              </div>
-            </div>
+          <Form.Item
+            name="risk_level"
+            label="风险等级"
+          >
+            <Select>
+              <Option value="low">低风险</Option>
+              <Option value="medium">中等风险</Option>
+              <Option value="high">高风险</Option>
+            </Select>
+          </Form.Item>
 
-            <div className="mt-6 flex space-x-2">
-              <button
-                onClick={handleUpdatePortfolio}
-                disabled={loading || !editFormData.name}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? '更新中...' : '更新'}
-              </button>
-              <button
-                onClick={() => setShowEditForm(false)}
-                className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-              >
+          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setEditModalVisible(false);
+                editForm.resetFields();
+              }}>
                 取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Button>
+              <Button type="primary" htmlType="submit" loading={loading}>
+                更新
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* 添加交易模态框 */}
-      {showTransactionForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">添加交易记录</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  股票代码
-                </label>
-                <input
-                  type="text"
-                  value={transactionFormData.ticker}
-                  onChange={(e) => setTransactionFormData({ ...transactionFormData, ticker: e.target.value.toUpperCase() })}
-                  placeholder="例如: 000001"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
+      <Modal
+        title="添加交易记录"
+        open={transactionModalVisible}
+        onCancel={() => {
+          setTransactionModalVisible(false);
+          transactionForm.resetFields();
+        }}
+        footer={null}
+        width={500}
+      >
+        <Form
+          form={transactionForm}
+          layout="vertical"
+          onFinish={handleAddTransaction}
+          initialValues={{
+            transaction_type: 'buy',
+            quantity: 100,
+            price: 10
+          }}
+        >
+          <Form.Item
+            name="ticker"
+            label="股票代码"
+            rules={[{ required: true, message: '请输入股票代码' }]}
+          >
+            <Input placeholder="例如: 000001" maxLength={6} />
+          </Form.Item>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  交易类型
-                </label>
-                <select
-                  value={transactionFormData.transaction_type}
-                  onChange={(e) => setTransactionFormData({ ...transactionFormData, transaction_type: e.target.value as 'buy' | 'sell' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="buy">买入</option>
-                  <option value="sell">卖出</option>
-                </select>
-              </div>
+          <Form.Item
+            name="transaction_type"
+            label="交易类型"
+            rules={[{ required: true, message: '请选择交易类型' }]}
+          >
+            <Select>
+              <Option value="buy">买入</Option>
+              <Option value="sell">卖出</Option>
+            </Select>
+          </Form.Item>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  数量
-                </label>
-                <input
-                  type="number"
-                  value={transactionFormData.quantity}
-                  onChange={(e) => setTransactionFormData({ ...transactionFormData, quantity: Number(e.target.value) })}
-                  placeholder="请输入股票数量"
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
+          <Form.Item
+            name="quantity"
+            label="数量"
+            rules={[{ required: true, message: '请输入数量' }]}
+          >
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  价格
-                </label>
-                <input
-                  type="number"
-                  value={transactionFormData.price}
-                  onChange={(e) => setTransactionFormData({ ...transactionFormData, price: Number(e.target.value) })}
-                  placeholder="请输入交易价格"
-                  min="0"
-                  step="0.01"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
+          <Form.Item
+            name="price"
+            label="价格"
+            rules={[{ required: true, message: '请输入价格' }]}
+          >
+            <InputNumber min={0.01} step={0.01} style={{ width: '100%' }} />
+          </Form.Item>
 
-              <div className="bg-gray-50 p-3 rounded">
-                <div className="text-sm text-gray-600">
-                  总金额: {formatCurrency(transactionFormData.quantity * transactionFormData.price)}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex space-x-2">
-              <button
-                onClick={handleAddTransaction}
-                disabled={loading || !transactionFormData.ticker || transactionFormData.quantity <= 0 || transactionFormData.price <= 0}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-              >
-                {loading ? '添加中...' : '添加交易'}
-              </button>
-              <button
-                onClick={() => setShowTransactionForm(false)}
-                className="flex-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-              >
+          <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+            <Space>
+              <Button onClick={() => {
+                setTransactionModalVisible(false);
+                transactionForm.resetFields();
+              }}>
                 取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Button>
+              <Button type="primary" htmlType="submit" loading={loading}>
+                添加
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

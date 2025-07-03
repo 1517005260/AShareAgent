@@ -68,8 +68,9 @@ def sentiment_agent(state: AgentState):
     # 如果需要显示推理过程
     if show_reasoning:
         show_agent_reasoning(message_content, "Sentiment Analysis Agent")
-        # 保存推理信息到metadata供API使用
-        state["metadata"]["agent_reasoning"] = message_content
+    
+    # 始终保存推理信息到metadata供API使用
+    state["metadata"]["agent_reasoning"] = message_content
 
     # 创建消息
     message = HumanMessage(

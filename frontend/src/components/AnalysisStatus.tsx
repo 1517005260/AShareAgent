@@ -24,9 +24,18 @@ const AnalysisStatus: React.FC<AnalysisStatusProps> = ({ runId, onComplete }) =>
         // 如果分析完成，获取结果
         if (response.data.status === 'completed') {
           const resultResponse = await ApiService.getAnalysisResult(runId);
-          if (resultResponse.success) {
-            setResult(resultResponse.data);
-            onComplete?.(resultResponse.data);
+          if (resultResponse.success && resultResponse.data) {
+            // Extract the actual result from the nested structure
+            const actualResult = resultResponse.data.result || resultResponse.data;
+            // Add ticker and task info from status response if not present in result
+            if (!actualResult.ticker && response.data.ticker) {
+              actualResult.ticker = response.data.ticker;
+            }
+            if (!actualResult.task_id && resultResponse.data.task_id) {
+              actualResult.task_id = resultResponse.data.task_id;
+            }
+            setResult(actualResult);
+            onComplete?.(actualResult);
           }
         }
       }

@@ -102,8 +102,9 @@ def valuation_agent(state: AgentState):
 
     if show_reasoning:
         show_agent_reasoning(message_content, "Valuation Analysis Agent")
-        # 保存推理信息到metadata供API使用
-        state["metadata"]["agent_reasoning"] = message_content
+    
+    # 始终保存推理信息到metadata供API使用
+    state["metadata"]["agent_reasoning"] = message_content
 
     show_workflow_status("Valuation Agent", "completed")
     # logger.info(

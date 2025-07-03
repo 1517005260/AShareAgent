@@ -185,8 +185,9 @@ def researcher_bull_agent(state: AgentState):
 
     if show_reasoning:
         show_agent_reasoning(message_content, "Bullish Researcher")
-        # 保存推理信息到metadata供API使用
-        state["metadata"]["agent_reasoning"] = message_content
+    
+    # 始终保存推理信息到metadata供API使用
+    state["metadata"]["agent_reasoning"] = message_content
 
     show_workflow_status("Bullish Researcher", "completed")
     return {

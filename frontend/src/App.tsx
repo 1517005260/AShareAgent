@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Layout, Menu, Typography, Space, Button, Avatar, Dropdown } from 'antd';
-import { 
-  DashboardOutlined, 
-  RobotOutlined, 
+import {
+  DashboardOutlined,
+  RobotOutlined,
   HistoryOutlined,
   BarChartOutlined,
   ExperimentOutlined,
@@ -69,7 +69,6 @@ function App() {
 
   const handleBacktestStart = (runId: string) => {
     setCurrentBacktestId(runId);
-    setSelectedMenu('backtest');
   };
 
   const handleLoginSuccess = (userInfo: UserInfo) => {
@@ -88,8 +87,8 @@ function App() {
 
   // 检查用户权限
   const hasPermission = (permission: string): boolean => {
-    return user?.permissions?.includes(permission) || 
-           user?.roles?.includes('admin') || false;
+    return user?.permissions?.includes(permission) ||
+      user?.roles?.includes('admin') || false;
   };
 
   // 如果未登录，显示登录页面
@@ -104,13 +103,10 @@ function App() {
           <Space direction="vertical" style={{ width: '100%' }} size="large">
             <AnalysisForm onAnalysisStart={handleAnalysisStart} />
             {currentRunId && (
-              <AnalysisStatus 
-                runId={currentRunId} 
+              <AnalysisStatus
+                runId={currentRunId}
                 onComplete={(result) => console.log('Analysis completed:', result)}
               />
-            )}
-            {hasPermission('backtest:basic') && (
-              <BacktestForm onBacktestStart={handleBacktestStart} />
             )}
           </Space>
         );
@@ -121,8 +117,8 @@ function App() {
               <>
                 <BacktestForm onBacktestStart={handleBacktestStart} />
                 {currentBacktestId && (
-                  <BacktestStatus 
-                    runId={currentBacktestId} 
+                  <BacktestStatus
+                    runId={currentBacktestId}
                     onComplete={(result) => console.log('Backtest completed:', result)}
                   />
                 )}
@@ -232,7 +228,7 @@ function App() {
 
   return (
     <Layout style={{ minHeight: '100vh', background: '#f5f5f5' }}>
-      <Header className="app-header" style={{ 
+      <Header className="app-header" style={{
         padding: '0 24px',
         display: 'flex',
         alignItems: 'center',
@@ -242,24 +238,24 @@ function App() {
           <BarChartOutlined className="logo-icon" />
           A股投资Agent分析平台
         </div>
-        
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <span style={{ color: 'white' }}>
             欢迎，{user?.full_name || user?.username}
           </span>
           <Dropdown menu={userMenu} placement="bottomRight">
-            <Button 
-              type="text" 
+            <Button
+              type="text"
               icon={<Avatar size="small" icon={<UserOutlined />} />}
               style={{ color: 'white' }}
             />
           </Dropdown>
         </div>
       </Header>
-      
+
       <Layout>
-        <Sider 
-          width={200} 
+        <Sider
+          width={200}
           className="app-sider"
           breakpoint="lg"
           collapsedWidth="0"
@@ -273,7 +269,7 @@ function App() {
             onSelect={({ key }) => setSelectedMenu(key as MenuKey)}
           />
         </Sider>
-        
+
         <Layout style={{ padding: '16px', background: '#f5f5f5' }}>
           <Content className="app-content">
             <div className="app-content-header">

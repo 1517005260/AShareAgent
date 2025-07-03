@@ -46,7 +46,11 @@ class IntelligentBacktester:
                  commission_rate: float = 0.0003, slippage_rate: float = 0.001,
                  benchmark_ticker: str = '000001',
                  benchmark_type: str = 'spe',
-                 agent_frequencies: Optional[Dict[str, str]] = None):
+                 agent_frequencies: Optional[Dict[str, str]] = None,
+                 time_granularity: str = 'daily',
+                 rebalance_frequency: str = 'daily',
+                 transaction_cost: float = 0.001,
+                 slippage: float = 0.0005):
         """
         初始化智能回测器
         
@@ -57,11 +61,15 @@ class IntelligentBacktester:
             end_date: 结束日期
             initial_capital: 初始资金
             num_of_news: 新闻分析数量
-            commission_rate: 手续费率
-            slippage_rate: 滑点率
-            benchmark_ticker: 基准指数 (已弃用，使用benchmark_type)
+            commission_rate: 手续费率 (已弃用，使用transaction_cost)
+            slippage_rate: 滑点率 (已弃用，使用slippage)
+            benchmark_ticker: 基准指数代码
             benchmark_type: 基准类型 ('spe', 'csi300', 'equal_weight', 'momentum', 'mean_reversion')
             agent_frequencies: 各agent的执行频率配置
+            time_granularity: 时间细粒度 ('minute', 'hourly', 'daily', 'weekly')
+            rebalance_frequency: 调仓频率 ('daily', 'weekly', 'monthly', 'quarterly')
+            transaction_cost: 交易手续费率
+            slippage: 滑点率
         """
         self.agent = agent
         self.ticker = ticker
@@ -71,6 +79,14 @@ class IntelligentBacktester:
         self.benchmark_ticker = benchmark_ticker  # 保留向后兼容
         self.benchmark_type = benchmark_type
         self.num_of_news = num_of_news
+        
+        # 新增高级参数
+        self.time_granularity = time_granularity
+        self.rebalance_frequency = rebalance_frequency
+        
+        # 使用新的交易成本参数，向后兼容旧参数
+        self.transaction_cost = transaction_cost if transaction_cost != 0.001 else commission_rate
+        self.slippage = slippage if slippage != 0.0005 else slippage_rate
         
         # 默认agent频率配置
         default_frequencies = {
@@ -87,7 +103,7 @@ class IntelligentBacktester:
         
         # 初始化组件
         self.cache_manager = CacheManager()
-        self.trade_executor = TradeExecutor(commission_rate, slippage_rate)
+        self.trade_executor = TradeExecutor(self.transaction_cost, self.slippage)
         self.visualizer = PerformanceVisualizer(ticker, initial_capital)
         self.benchmark_calculator = BenchmarkCalculator(benchmark_type, initial_capital)
         

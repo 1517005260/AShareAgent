@@ -25,6 +25,18 @@ class Trade:
     executed_quantity: int
     commission: float = 0.0
     slippage: float = 0.0
+    
+    def to_dict(self):
+        """转换为字典格式"""
+        return {
+            "date": self.date,
+            "action": self.action,
+            "quantity": self.quantity,
+            "price": self.price,
+            "executed_quantity": self.executed_quantity,
+            "commission": self.commission,
+            "slippage": self.slippage
+        }
 
 
 @dataclass

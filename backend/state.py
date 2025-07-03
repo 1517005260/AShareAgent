@@ -108,6 +108,11 @@ class ApiState:
         """获取所有Agent信息"""
         with self._lock:
             return [data["info"] for data in self._agent_data.values()]
+    
+    def get_all_agent_data(self) -> Dict[str, Dict]:
+        """获取所有Agent完整数据"""
+        with self._lock:
+            return self._agent_data.copy()
 
     def register_run(self, run_id: str):
         """注册新的运行"""

@@ -270,8 +270,9 @@ def debate_room_agent(state: AgentState):
 
     if show_reasoning:
         show_agent_reasoning(message_content, "Debate Room")
-        # 保存推理信息到metadata供API使用
-        state["metadata"]["agent_reasoning"] = message_content
+    
+    # 始终保存推理信息到metadata供API使用
+    state["metadata"]["agent_reasoning"] = message_content
 
     show_workflow_status("A股特色辩论室", "completed")
     logger.info(f"A股辩论室分析完成: {final_signal}, 置信度: {confidence:.3f}")

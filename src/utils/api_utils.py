@@ -340,14 +340,13 @@ def agent_endpoint(agent_name: str, description: str = ""):
 
                 # 从状态中提取推理细节（如果有）
                 reasoning_details = None
-                if result.get("metadata", {}).get("show_reasoning", False):
-                    if "agent_reasoning" in result.get("metadata", {}):
-                        reasoning_details = result["metadata"]["agent_reasoning"]
-                        api_state.update_agent_data(
-                            agent_name,
-                            "reasoning",
-                            reasoning_details
-                        )
+                if "agent_reasoning" in result.get("metadata", {}):
+                    reasoning_details = result["metadata"]["agent_reasoning"]
+                    api_state.update_agent_data(
+                        agent_name,
+                        "reasoning",
+                        reasoning_details
+                    )
 
                 # 更新Agent状态为已完成
                 api_state.update_agent_state(agent_name, "completed")

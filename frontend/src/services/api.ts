@@ -47,6 +47,9 @@ export interface AnalysisRequest {
   num_of_news?: number;
   initial_capital?: number;
   initial_position?: number;
+  start_date?: string;
+  end_date?: string;
+  show_summary?: boolean;
 }
 
 export interface AnalysisStatus {
@@ -150,6 +153,11 @@ export interface BacktestRequest {
   initial_capital?: number;
   num_of_news?: number;
   agent_frequencies?: Record<string, string>;
+  time_granularity?: string;
+  benchmark_type?: string;
+  rebalance_frequency?: string;
+  transaction_cost?: number;
+  slippage?: number;
 }
 
 export interface BacktestResponse {

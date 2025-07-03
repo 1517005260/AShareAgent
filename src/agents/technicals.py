@@ -221,8 +221,9 @@ def technical_analyst_agent(state: AgentState):
 
     if show_reasoning:
         show_agent_reasoning(analysis_report, "Technical Analyst")
-        # 保存推理信息到state的metadata供API使用
-        state["metadata"]["agent_reasoning"] = analysis_report
+    
+    # 始终保存推理信息到state的metadata供API使用
+    state["metadata"]["agent_reasoning"] = analysis_report
 
     show_workflow_status("Technical Analyst", "completed")
 

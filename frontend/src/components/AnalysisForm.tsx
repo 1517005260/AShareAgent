@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, InputNumber, Switch, message } from 'antd';
+import { Form, Input, Button, Card, InputNumber, Switch, DatePicker, message } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { ApiService, type AnalysisRequest } from '../services/api';
+import dayjs, { Dayjs } from 'dayjs';
 
 interface AnalysisFormProps {
   onAnalysisStart: (runId: string) => void;
@@ -11,10 +12,17 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalysisStart }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
-  const onFinish = async (values: AnalysisRequest) => {
+  const onFinish = async (values: any) => {
     setLoading(true);
     try {
-      const response = await ApiService.startAnalysis(values);
+      // 处理日期格式
+      const formattedValues: AnalysisRequest = {
+        ...values,
+        start_date: values.start_date ? dayjs(values.start_date).format('YYYY-MM-DD') : undefined,
+        end_date: values.end_date ? dayjs(values.end_date).format('YYYY-MM-DD') : undefined,
+      };
+      
+      const response = await ApiService.startAnalysis(formattedValues);
       if (response.success && response.data?.run_id) {
         message.success('分析任务已启动');
         onAnalysisStart(response.data.run_id);
@@ -40,9 +48,10 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalysisStart }) => {
         className="modern-form"
         initialValues={{
           show_reasoning: true,
-          num_of_news: 20,
+          num_of_news: 5,
           initial_capital: 100000,
-          initial_position: 0
+          initial_position: 0,
+          show_summary: false
         }}
       >
         <Form.Item
@@ -80,6 +89,39 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalysisStart }) => {
           name="initial_position"
         >
           <InputNumber min={0} style={{ width: '100%' }} />
+        </Form.Item>
+
+        <Form.Item
+          label="分析开始日期"
+          name="start_date"
+          tooltip="可选，不填则使用默认值（一年前）"
+        >
+          <DatePicker 
+            style={{ width: '100%' }} 
+            placeholder="选择开始日期" 
+            format="YYYY-MM-DD"
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="分析结束日期"
+          name="end_date"
+          tooltip="可选，不填则使用默认值（昨天）"
+        >
+          <DatePicker 
+            style={{ width: '100%' }} 
+            placeholder="选择结束日期" 
+            format="YYYY-MM-DD"
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="显示详细摘要"
+          name="show_summary"
+          valuePropName="checked"
+          tooltip="显示美观的摘要报告"
+        >
+          <Switch />
         </Form.Item>
 
         <Form.Item>

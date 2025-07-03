@@ -189,8 +189,9 @@ def researcher_bear_agent(state: AgentState):
 
     if show_reasoning:
         show_agent_reasoning(message_content, "Bearish Researcher")
-        # 保存推理信息到metadata供API使用
-        state["metadata"]["agent_reasoning"] = message_content
+    
+    # 始终保存推理信息到metadata供API使用
+    state["metadata"]["agent_reasoning"] = message_content
 
     show_workflow_status("Bearish Researcher", "completed")
     return {
