@@ -24,18 +24,52 @@ class CacheManager:
         self._cache_misses = 0
     
     def get_cached_price_data(self, ticker: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
-        """获取缓存的价格数据"""
+        """获取缓存的价格数据，增加错误处理和回退策略"""
         cache_key = f"{ticker}_{start_date}_{end_date}"
         
         if cache_key in self._price_data_cache:
             return self._price_data_cache[cache_key]
         
-        df = get_price_data(ticker, start_date, end_date)
+        # 尝试获取数据，如果失败则尝试获取更大的时间范围
+        df = None
+        max_retries = 3
         
-        if df is not None and not df.empty:
-            self._price_data_cache[cache_key] = df
+        for attempt in range(max_retries):
+            try:
+                df = get_price_data(ticker, start_date, end_date)
+                if df is not None and not df.empty:
+                    self._price_data_cache[cache_key] = df
+                    return df
+            except Exception as e:
+                print(f"数据获取失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2 ** attempt)
+        
+        # 如果所有尝试都失败，尝试从已有缓存中找到相似的数据
+        if df is None or df.empty:
+            df = self._get_fallback_data(ticker, start_date, end_date)
             
         return df
+    
+    def _get_fallback_data(self, ticker: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
+        """从缓存中获取回退数据"""
+        # 寻找相同ticker的其他时间范围数据
+        for key, cached_df in self._price_data_cache.items():
+            if key.startswith(ticker) and cached_df is not None and not cached_df.empty:
+                # 尝试过滤出所需日期范围的数据
+                try:
+                    cached_df['date'] = pd.to_datetime(cached_df['date'])
+                    filtered_df = cached_df[
+                        (cached_df['date'] >= start_date) & 
+                        (cached_df['date'] <= end_date)
+                    ]
+                    if not filtered_df.empty:
+                        return filtered_df
+                except:
+                    continue
+        
+        return None
     
     def get_agent_result(self, cache_key: str) -> Optional[Any]:
         """获取缓存的agent结果"""

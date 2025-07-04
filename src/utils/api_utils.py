@@ -361,9 +361,16 @@ def agent_endpoint(agent_name: str, description: str = ""):
                     reasoning_details = state["metadata"]["agent_reasoning"]
                 
                 if reasoning_details:
+                    # Debug logging for bull/bear agents
+                    if agent_name in ['researcher_bull_agent', 'researcher_bear_agent']:
+                        logger.info(f"Found reasoning details for {agent_name}: perspective={reasoning_details.get('perspective') if isinstance(reasoning_details, dict) else 'N/A'}")
+                        logger.info(f"Reasoning details type for {agent_name}: {type(reasoning_details)}")
+                    
+                    # Use agent-specific key for saving reasoning data to avoid overwrites
+                    reasoning_key = f"{agent_name}_reasoning" if agent_name in ['researcher_bull_agent', 'researcher_bear_agent'] else "reasoning"
                     api_state.update_agent_data(
                         agent_name,
-                        "reasoning",
+                        reasoning_key,
                         reasoning_details
                     )
 

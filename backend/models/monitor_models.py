@@ -103,60 +103,164 @@ class MonitorService:
         self.db = db_manager
     
     def get_system_logs(self, filters: SystemLogFilter = None, 
-                       limit: int = 100, offset: int = 0) -> List[SystemLogEntry]:
-        """获取系统日志"""
-        where_conditions = []
-        params = []
+                       limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """获取系统日志（从文件系统和数据库）"""
+        import os
+        import glob
+        from pathlib import Path
         
-        if filters:
-            if filters.user_id is not None:
-                where_conditions.append("user_id = ?")
-                params.append(filters.user_id)
-            
-            if filters.action:
-                where_conditions.append("action LIKE ?")
-                params.append(f"%{filters.action}%")
-            
-            if filters.resource:
-                where_conditions.append("resource = ?")
-                params.append(filters.resource)
-            
-            if filters.start_date:
-                where_conditions.append("created_at >= ?")
-                params.append(filters.start_date.isoformat())
-            
-            if filters.end_date:
-                where_conditions.append("created_at <= ?")
-                params.append(filters.end_date.isoformat())
-            
-            if filters.ip_address:
-                where_conditions.append("ip_address = ?")
-                params.append(filters.ip_address)
+        # 获取日志文件路径
+        logs_dir = Path(__file__).parent.parent.parent / "logs"
         
-        where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+        # 收集所有日志文件
+        log_files = []
+        if logs_dir.exists():
+            # 获取所有.log文件
+            for log_file in logs_dir.glob("*.log"):
+                if log_file.is_file():
+                    log_files.append(log_file)
         
-        query = f"""
-        SELECT * FROM system_logs 
-        WHERE {where_clause}
-        ORDER BY created_at DESC 
-        LIMIT ? OFFSET ?
-        """
-        params.extend([limit, offset])
+        # 从文件系统读取日志
+        file_logs = []
+        for log_file in sorted(log_files, key=lambda x: x.stat().st_mtime, reverse=True):
+            try:
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    # 读取最后的日志条目
+                    for i, line in enumerate(reversed(lines[-200:])):  # 最多读取200行
+                        if line.strip():
+                            parsed_log = self._parse_log_line(line.strip())
+                            if parsed_log:
+                                parsed_log["id"] = len(file_logs) + 1
+                                parsed_log["module"] = log_file.stem
+                                file_logs.append(parsed_log)
+            except Exception as e:
+                continue
         
-        result = self.db.execute_query(query, params)
-        logs = []
-        
-        for row in result:
-            log_data = dict(row)
-            if log_data.get('details'):
-                try:
-                    log_data['details'] = json.loads(log_data['details'])
-                except json.JSONDecodeError:
-                    log_data['details'] = {}
+        # 从数据库读取操作日志
+        db_logs = []
+        try:
+            where_conditions = []
+            params = []
             
-            logs.append(SystemLogEntry(**log_data))
+            if filters:
+                if filters.user_id is not None:
+                    where_conditions.append("user_id = ?")
+                    params.append(filters.user_id)
+                
+                if filters.action:
+                    where_conditions.append("action LIKE ?")
+                    params.append(f"%{filters.action}%")
+                
+                if filters.resource:
+                    where_conditions.append("resource = ?")
+                    params.append(filters.resource)
+                
+                if filters.start_date:
+                    where_conditions.append("created_at >= ?")
+                    params.append(filters.start_date.isoformat())
+                
+                if filters.end_date:
+                    where_conditions.append("created_at <= ?")
+                    params.append(filters.end_date.isoformat())
+                
+                if filters.ip_address:
+                    where_conditions.append("ip_address = ?")
+                    params.append(filters.ip_address)
+            
+            where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+            
+            query = f"""
+            SELECT * FROM system_logs 
+            WHERE {where_clause}
+            ORDER BY created_at DESC 
+            LIMIT ?
+            """
+            params.append(50)  # 限制数据库日志数量
+            
+            result = self.db.execute_query(query, params)
+            
+            for row in result:
+                log_data = dict(row)
+                db_logs.append({
+                    "id": log_data.get('id', 0),
+                    "level": "INFO",
+                    "message": f"[{log_data.get('action', 'Unknown')}] {log_data.get('resource', '')}",
+                    "timestamp": log_data.get('created_at', datetime.now().isoformat()),
+                    "module": log_data.get('resource', 'system')
+                })
+        except Exception as e:
+            pass
         
-        return logs
+        # 合并并排序日志
+        all_logs = file_logs + db_logs
+        
+        def safe_parse_timestamp(timestamp_str):
+            """安全解析时间戳"""
+            try:
+                if isinstance(timestamp_str, str):
+                    return datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                else:
+                    return datetime.now()
+            except:
+                return datetime.now()
+        
+        all_logs.sort(key=lambda x: safe_parse_timestamp(x.get('timestamp')), reverse=True)
+        
+        # 应用分页
+        start_idx = offset
+        end_idx = offset + limit
+        
+        return all_logs[start_idx:end_idx]
+    
+    def _parse_log_line(self, line: str) -> Dict[str, Any]:
+        """解析日志行，返回结构化数据"""
+        import re
+        
+        # 匹配标准格式: 2025-07-02 12:39:28 - api - INFO - message
+        pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) - (\w+) - (\w+) - (.+)'
+        match = re.match(pattern, line)
+        
+        if match:
+            timestamp_str, module, level, message = match.groups()
+            try:
+                # 解析时间戳
+                timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                timestamp = datetime.now()
+            
+            return {
+                "level": level.upper(),
+                "message": message.strip(),
+                "timestamp": timestamp.isoformat()
+            }
+        else:
+            # 如果不匹配标准格式，使用原始逻辑
+            return {
+                "level": self._extract_log_level(line),
+                "message": line,
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    def _extract_log_level(self, line: str) -> str:
+        """从日志行中提取日志级别"""
+        line_upper = line.upper()
+        if " - ERROR - " in line_upper or " - EXCEPTION - " in line_upper:
+            return "ERROR"
+        elif " - WARNING - " in line_upper or " - WARN - " in line_upper:
+            return "WARNING"
+        elif " - DEBUG - " in line_upper:
+            return "DEBUG"
+        elif " - INFO - " in line_upper:
+            return "INFO"
+        elif "ERROR" in line_upper or "EXCEPTION" in line_upper:
+            return "ERROR"
+        elif "WARNING" in line_upper or "WARN" in line_upper:
+            return "WARNING"
+        elif "DEBUG" in line_upper:
+            return "DEBUG"
+        else:
+            return "INFO"
     
     def get_log_summary(self, hours: int = 24) -> Dict[str, Any]:
         """获取日志摘要"""

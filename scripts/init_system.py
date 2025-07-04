@@ -14,6 +14,7 @@ sys.path.insert(0, str(project_root))
 
 from src.database.models import DatabaseManager, AgentModel
 from backend.models.auth_models import UserAuthService
+from src.utils.dual_logger import init_dual_logging_system, get_dual_logger
 
 
 def init_database():
@@ -24,6 +25,10 @@ def init_database():
     data_dir = project_root / "data"
     data_dir.mkdir(exist_ok=True)
     
+    # 确保日志目录存在
+    logs_dir = project_root / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    
     # 创建数据库管理器实例
     db_path = str(data_dir / "ashare_agent.db")
     print(f"   数据库路径: {db_path}")
@@ -32,13 +37,31 @@ def init_database():
         # 初始化数据库
         db_manager = DatabaseManager(db_path)
         
+        # 初始化双写日志系统
+        system_logger = init_dual_logging_system(db_manager)
+        system_logger.info("系统初始化开始")
+        
         # 验证数据库表是否创建成功
         with db_manager.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
             tables = cursor.fetchall()
             
+            # 验证system_logs表是否存在
+            table_names = [table[0] for table in tables]
+            if 'system_logs' in table_names:
+                print("   ✅ system_logs表创建成功，双写日志系统可用")
+                system_logger.info("system_logs表验证成功，双写日志系统已启用")
+            else:
+                print("   ⚠️  system_logs表未找到，只使用文件日志")
+                
         print(f"   ✅ 成功创建 {len(tables)} 个数据表")
+        system_logger.info(f"数据库初始化完成，共创建 {len(tables)} 个数据表")
+        
+        # 将数据库管理器存储为全局变量，供其他函数使用
+        global global_db_manager
+        global_db_manager = db_manager
+        
         return True
         
     except Exception as e:
@@ -80,8 +103,9 @@ def init_users():
     """初始化用户：创建管理员和示例用户"""
     print("👥 初始化用户...")
     
-    db_manager = DatabaseManager()
+    db_manager = global_db_manager
     auth_service = UserAuthService(db_manager)
+    user_logger = get_dual_logger('user_management')
     
     # 定义用户数据
     users_data = [
@@ -139,6 +163,8 @@ def init_users():
             
             if user_id:
                 print(f"   ✅ 创建用户: {user_data['username']} ({user_data['full_name']})")
+                user_logger.info(f"创建用户成功: {user_data['username']} ({user_data['full_name']})", 
+                               user_id=user_id, resource_id=str(user_id))
                 
                 # 如果是超级用户，设置标记
                 if user_data["is_superuser"]:
@@ -166,8 +192,24 @@ def init_agents():
     """初始化Agent配置"""
     print("🤖 初始化Agent...")
     
-    db_manager = DatabaseManager()
+    # 尝试使用全局数据库管理器，如果不存在则创建新的
+    try:
+        db_manager = global_db_manager
+    except NameError:
+        # 如果global_db_manager未定义，创建新的数据库管理器
+        data_dir = project_root / "data"
+        db_path = str(data_dir / "ashare_agent.db")
+        db_manager = DatabaseManager(db_path)
+        
+        # 初始化双写日志系统（如果需要）
+        try:
+            from src.utils.dual_logger import logger_manager
+            logger_manager.set_database_manager(db_manager)
+        except:
+            pass  # 忽略日志系统初始化失败
+    
     agent_model = AgentModel(db_manager)
+    agent_logger = get_dual_logger('agent_management')
     
     # 默认Agent配置
     default_agents = [
@@ -321,9 +363,13 @@ def init_agents():
         
         if success:
             print(f"   ✅ 创建Agent: {agent_config['display_name']}")
+            agent_logger.info(f"创建Agent成功: {agent_config['display_name']} ({agent_config['name']})", 
+                           resource_id=agent_config['name'])
             created_agents += 1
         else:
             print(f"   ❌ 创建Agent失败: {agent_config['display_name']}")
+            agent_logger.error(f"创建Agent失败: {agent_config['display_name']} ({agent_config['name']})", 
+                            resource_id=agent_config['name'])
     
     # 显示Agent统计
     agents = agent_model.get_all_agents()
@@ -336,7 +382,8 @@ def init_system_config():
     """初始化系统配置"""
     print("⚙️  初始化系统配置...")
     
-    db_manager = DatabaseManager()
+    db_manager = global_db_manager
+    config_logger = get_dual_logger('system_config')
     
     default_configs = [
         {

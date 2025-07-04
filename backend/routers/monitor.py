@@ -186,20 +186,19 @@ async def get_system_logs(
         # 转换为前端期望的格式
         formatted_logs = []
         for log in logs:
+            # 处理时间戳
+            if isinstance(log.get('timestamp'), (int, float)):
+                timestamp = datetime.fromtimestamp(log['timestamp']).isoformat()
+            else:
+                timestamp = log.get('timestamp', datetime.now().isoformat())
+            
             log_dict = {
-                "id": log.id,
-                "level": "INFO",  # 默认级别，可以根据action类型判断
-                "message": log.action,
-                "timestamp": log.created_at.isoformat() if log.created_at else datetime.now().isoformat(),
-                "module": log.resource or "-"
+                "id": log.get('id', 0),
+                "level": log.get('level', 'INFO'),
+                "message": log.get('message', ''),
+                "timestamp": timestamp,
+                "module": log.get('module', '-')
             }
-            # 根据action类型设置级别
-            if "error" in log.action.lower() or "failed" in log.action.lower():
-                log_dict["level"] = "ERROR"
-            elif "warning" in log.action.lower():
-                log_dict["level"] = "WARNING"
-            elif "debug" in log.action.lower():
-                log_dict["level"] = "DEBUG"
             
             formatted_logs.append(log_dict)
         

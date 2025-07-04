@@ -77,7 +77,7 @@ class AuthService:
         permissions = self.user_auth.get_user_permissions(user.id)
         
         # 创建访问令牌
-        access_token_expires = timedelta(minutes=30)  # 30分钟过期
+        access_token_expires = timedelta(minutes=1440)  # 24小时过期
         access_token = self.user_auth.create_access_token(
             data={
                 "sub": user.username,
@@ -384,3 +384,15 @@ def require_admin(current_user: UserInDB = Depends(get_current_active_user)) -> 
             detail="需要管理员权限"
         )
     return current_user
+
+
+def decode_access_token(token: str) -> Optional[dict]:
+    """解码访问令牌 - 用于中间件"""
+    from backend.models.auth_models import SECRET_KEY, ALGORITHM
+    from jose import jwt, JWTError
+    
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        return None

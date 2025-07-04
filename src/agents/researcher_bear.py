@@ -8,6 +8,7 @@ import ast
 @agent_endpoint("researcher_bear", "空方研究员，从看空角度分析市场数据并提出风险警示")
 def researcher_bear_agent(state: AgentState):
     """Analyzes signals from a bearish perspective and generates cautionary investment thesis."""
+    print("=== BEAR RESEARCHER AGENT STARTED ===")
     show_workflow_status("Bearish Researcher")
     show_reasoning = state["metadata"]["show_reasoning"]
 
@@ -191,7 +192,6 @@ def researcher_bear_agent(state: AgentState):
         show_agent_reasoning(message_content, "Bearish Researcher")
     
     # 保存推理信息到agent特定的键中，避免被其他agent覆盖
-    state["metadata"]["agent_reasoning"] = message_content
     state["metadata"]["researcher_bear_agent_reasoning"] = message_content
 
     show_workflow_status("Bearish Researcher", "completed")

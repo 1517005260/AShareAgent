@@ -418,9 +418,33 @@ async def get_analysis_result(
         
         for agent_name in run_info.agents:
             agent_data = api_state.get_agent_data(agent_name)
-            if agent_data and "reasoning" in agent_data:
-                reasoning_data = safe_parse_json(agent_data["reasoning"])
-                agent_results[agent_name] = serialize_for_api(reasoning_data)
+            if agent_data:
+                reasoning_data = None
+                
+                # 特殊处理bull/bear agents，使用agent特定键
+                if agent_name in ['researcher_bull_agent', 'researcher_bear_agent']:
+                    agent_specific_key = f"{agent_name}_reasoning"
+                    if agent_specific_key in agent_data:
+                        reasoning_data = agent_data[agent_specific_key]
+                        logger.info(f"从内存获取{agent_name}特定数据: {agent_specific_key}")
+                    elif "reasoning" in agent_data:
+                        reasoning_data = agent_data["reasoning"]
+                        logger.warning(f"从内存获取{agent_name}fallback数据")
+                        # 验证这不是sentiment数据
+                        if isinstance(reasoning_data, str) and 'sentiment score' in reasoning_data.lower():
+                            logger.error(f"跳过{agent_name}的sentiment数据")
+                            continue
+                else:
+                    # 其他agents使用标准reasoning键
+                    if "reasoning" in agent_data:
+                        reasoning_data = agent_data["reasoning"]
+                
+                if reasoning_data:
+                    reasoning_data = safe_parse_json(reasoning_data)
+                    # 映射agent名称到前端期望的名称
+                    from backend.services.analysis import _map_agent_name
+                    frontend_name = _map_agent_name(agent_name)
+                    agent_results[frontend_name] = serialize_for_api(reasoning_data)
 
         # 尝试获取portfolio_management的最终决策
         final_decision = None

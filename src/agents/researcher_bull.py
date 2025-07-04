@@ -8,6 +8,8 @@ import ast
 @agent_endpoint("researcher_bull", "多方研究员，从看多角度分析市场数据并提出投资论点")
 def researcher_bull_agent(state: AgentState):
     """Analyzes signals from a bullish perspective and generates optimistic investment thesis."""
+    print("=== BULL RESEARCHER AGENT STARTED ===")
+    print(f"=== BULL AGENT: Generated thesis_points: {len(bullish_points) if 'bullish_points' in locals() else 'Not yet'} ===")
     show_workflow_status("Bullish Researcher")
     show_reasoning = state["metadata"]["show_reasoning"]
 
@@ -188,7 +190,6 @@ def researcher_bull_agent(state: AgentState):
         show_agent_reasoning(message_content, "Bullish Researcher")
     
     # 保存推理信息到agent特定的键中，避免被其他agent覆盖
-    state["metadata"]["agent_reasoning"] = message_content
     state["metadata"]["researcher_bull_agent_reasoning"] = message_content
 
     show_workflow_status("Bullish Researcher", "completed")

@@ -92,39 +92,149 @@ def execute_stock_analysis(request: StockAnalysisRequest, run_id: str) -> Dict[s
             
             for agent_name in run_info.agents:
                 agent_data = all_agents.get(agent_name)
-                if agent_data and "latest" in agent_data and agent_data["latest"].get("reasoning"):
+                if agent_data and "latest" in agent_data:
                     try:
                         from ..utils.api_utils import safe_parse_json, serialize_for_api
-                        reasoning_data = agent_data["latest"]["reasoning"]
+                        reasoning_data = None
                         
-                        # If reasoning_data is a string, try to parse it as JSON
-                        if isinstance(reasoning_data, str):
-                            reasoning_data = safe_parse_json(reasoning_data)
+                        # Special handling for bull/bear agents that use agent-specific keys
+                        if agent_name in ['researcher_bull_agent', 'researcher_bear_agent']:
+                            # Try to get from the agent-specific key in latest data
+                            agent_specific_key = f"{agent_name}_reasoning"
+                            logger.info(f"Looking for {agent_name} data in key: {agent_specific_key}")
+                            logger.info(f"Available keys in {agent_name} latest data: {list(agent_data['latest'].keys())}")
+                            
+                            # First check the exact agent-specific key 
+                            if agent_data["latest"].get(agent_specific_key):
+                                reasoning_data = agent_data["latest"][agent_specific_key]
+                                logger.info(f"Found {agent_name} data in agent-specific key: {agent_specific_key}")
+                                logger.info(f"Data type: {type(reasoning_data)}, has perspective: {'perspective' in reasoning_data if isinstance(reasoning_data, dict) else False}")
+                            # Also check if the data was stored with a different key due to the reasoning_key logic  
+                            elif agent_data["latest"].get("agent_reasoning"):
+                                reasoning_data = agent_data["latest"]["agent_reasoning"]
+                                logger.warning(f"Using fallback reasoning for {agent_name} - checking if this is correct data...")
+                                # Validate that this is not sentiment data leaking through
+                                if isinstance(reasoning_data, dict) and 'perspective' in reasoning_data:
+                                    logger.info(f"Fallback reasoning data for {agent_name} is correct (has perspective)")
+                                elif isinstance(reasoning_data, str) and ('sentiment score' in reasoning_data.lower() or 'news articles' in reasoning_data.lower()):
+                                    logger.error(f"Fallback reasoning for {agent_name} contains sentiment data - SKIPPING")
+                                    reasoning_data = None
+                                else:
+                                    logger.warning(f"Fallback reasoning for {agent_name} structure unclear: {type(reasoning_data)}")
+                            else:
+                                logger.error(f"No reasoning data found for {agent_name} in either {agent_specific_key} or reasoning")
+                        else:
+                            # For other agents, use the standard reasoning key
+                            reasoning_data = agent_data["latest"].get("reasoning")
+                            if reasoning_data:
+                                logger.info(f"Found standard reasoning data for {agent_name}")
+                            else:
+                                logger.warning(f"No reasoning data found for {agent_name}")
                         
-                        # Map agent names to expected frontend names
-                        frontend_name = _map_agent_name(agent_name)
-                        agent_results[frontend_name] = serialize_for_api(reasoning_data)
-                        logger.info(f"Successfully collected data from agent: {agent_name} -> {frontend_name}")
+                        if reasoning_data:
+                            # If reasoning_data is a string, try to parse it as JSON
+                            if isinstance(reasoning_data, str):
+                                reasoning_data = safe_parse_json(reasoning_data)
+                            
+                            # Map agent names to expected frontend names
+                            frontend_name = _map_agent_name(agent_name)
+                            
+                            # Special validation for bull/bear agents to ensure correct data structure
+                            if agent_name in ['researcher_bull_agent', 'researcher_bear_agent']:
+                                if isinstance(reasoning_data, dict) and 'perspective' in reasoning_data and 'thesis_points' in reasoning_data:
+                                    # Correct bull/bear data structure
+                                    agent_results[frontend_name] = serialize_for_api(reasoning_data)
+                                    logger.info(f"Successfully collected VALID {agent_name} data -> {frontend_name}")
+                                else:
+                                    # Invalid data structure, log error but don't use it
+                                    logger.error(f"INVALID {agent_name} data structure: {reasoning_data}")
+                                    logger.error(f"Expected perspective and thesis_points, got: {list(reasoning_data.keys()) if isinstance(reasoning_data, dict) else type(reasoning_data)}")
+                                    # Skip adding this invalid data
+                                    continue
+                            else:
+                                agent_results[frontend_name] = serialize_for_api(reasoning_data)
+                                logger.info(f"Successfully collected data from agent: {agent_name} -> {frontend_name}")
+                            
+                            # Debug bull/bear data collection
+                            if agent_name in ['researcher_bull_agent', 'researcher_bear_agent']:
+                                logger.info(f"Raw data from {agent_name}: perspective={reasoning_data.get('perspective') if isinstance(reasoning_data, dict) else 'N/A'}")
+                                logger.info(f"Raw data from {agent_name}: confidence={reasoning_data.get('confidence') if isinstance(reasoning_data, dict) else 'N/A'}")
+                        else:
+                            logger.warning(f"No reasoning data found for agent: {agent_name}")
                     except Exception as e:
                         logger.warning(f"Failed to process agent {agent_name} data: {e}")
         else:
             # Fallback: check all agents if run_info doesn't have agent list
             logger.warning(f"No agent list found in run_info for {run_id}, checking all agents")
             for agent_name, agent_data in all_agents.items():
-                if agent_data and "latest" in agent_data and agent_data["latest"].get("reasoning"):
+                if agent_data and "latest" in agent_data:
                     # Check if this agent participated in the current run by checking timestamp
                     try:
                         from ..utils.api_utils import safe_parse_json, serialize_for_api
-                        reasoning_data = agent_data["latest"]["reasoning"]
+                        reasoning_data = None
                         
-                        # If reasoning_data is a string, try to parse it as JSON
-                        if isinstance(reasoning_data, str):
-                            reasoning_data = safe_parse_json(reasoning_data)
+                        # Special handling for bull/bear agents that use agent-specific keys
+                        if agent_name in ['researcher_bull_agent', 'researcher_bear_agent']:
+                            # Try to get from the agent-specific key in latest data
+                            agent_specific_key = f"{agent_name}_reasoning"
+                            logger.info(f"Looking for {agent_name} data in key: {agent_specific_key}")
+                            logger.info(f"Available keys in {agent_name} latest data: {list(agent_data['latest'].keys())}")
+                            
+                            # First check the exact agent-specific key 
+                            if agent_data["latest"].get(agent_specific_key):
+                                reasoning_data = agent_data["latest"][agent_specific_key]
+                                logger.info(f"Found {agent_name} data in agent-specific key: {agent_specific_key}")
+                                logger.info(f"Data type: {type(reasoning_data)}, has perspective: {'perspective' in reasoning_data if isinstance(reasoning_data, dict) else False}")
+                            # Also check if the data was stored with a different key due to the reasoning_key logic  
+                            elif agent_data["latest"].get("agent_reasoning"):
+                                reasoning_data = agent_data["latest"]["agent_reasoning"]
+                                logger.warning(f"Using fallback reasoning for {agent_name} - checking if this is correct data...")
+                                # Validate that this is not sentiment data leaking through
+                                if isinstance(reasoning_data, dict) and 'perspective' in reasoning_data:
+                                    logger.info(f"Fallback reasoning data for {agent_name} is correct (has perspective)")
+                                elif isinstance(reasoning_data, str) and ('sentiment score' in reasoning_data.lower() or 'news articles' in reasoning_data.lower()):
+                                    logger.error(f"Fallback reasoning for {agent_name} contains sentiment data - SKIPPING")
+                                    reasoning_data = None
+                                else:
+                                    logger.warning(f"Fallback reasoning for {agent_name} structure unclear: {type(reasoning_data)}")
+                            else:
+                                logger.error(f"No reasoning data found for {agent_name} in either {agent_specific_key} or reasoning")
+                        else:
+                            # For other agents, use the standard reasoning key
+                            reasoning_data = agent_data["latest"].get("reasoning")
+                            if reasoning_data:
+                                logger.info(f"Found standard reasoning data for {agent_name}")
+                            else:
+                                logger.warning(f"No reasoning data found for {agent_name}")
                         
-                        # Map agent names to expected frontend names
-                        frontend_name = _map_agent_name(agent_name)
-                        agent_results[frontend_name] = serialize_for_api(reasoning_data)
-                        logger.info(f"Successfully collected data from agent: {agent_name} -> {frontend_name}")
+                        if reasoning_data:
+                            # If reasoning_data is a string, try to parse it as JSON
+                            if isinstance(reasoning_data, str):
+                                reasoning_data = safe_parse_json(reasoning_data)
+                            
+                            # Map agent names to expected frontend names
+                            frontend_name = _map_agent_name(agent_name)
+                            
+                            # Special validation for bull/bear agents to ensure correct data structure
+                            if agent_name in ['researcher_bull_agent', 'researcher_bear_agent']:
+                                if isinstance(reasoning_data, dict) and 'perspective' in reasoning_data and 'thesis_points' in reasoning_data:
+                                    # Correct bull/bear data structure
+                                    agent_results[frontend_name] = serialize_for_api(reasoning_data)
+                                    logger.info(f"Successfully collected VALID {agent_name} data -> {frontend_name}")
+                                else:
+                                    # Invalid data structure, log error but don't use it
+                                    logger.error(f"INVALID {agent_name} data structure: {reasoning_data}")
+                                    logger.error(f"Expected perspective and thesis_points, got: {list(reasoning_data.keys()) if isinstance(reasoning_data, dict) else type(reasoning_data)}")
+                                    # Skip adding this invalid data
+                                    continue
+                            else:
+                                agent_results[frontend_name] = serialize_for_api(reasoning_data)
+                                logger.info(f"Successfully collected data from agent: {agent_name} -> {frontend_name}")
+                            
+                            # Debug bull/bear data collection
+                            if agent_name in ['researcher_bull_agent', 'researcher_bear_agent']:
+                                logger.info(f"Raw data from {agent_name}: perspective={reasoning_data.get('perspective') if isinstance(reasoning_data, dict) else 'N/A'}")
+                                logger.info(f"Raw data from {agent_name}: confidence={reasoning_data.get('confidence') if isinstance(reasoning_data, dict) else 'N/A'}")
                     except Exception as e:
                         logger.warning(f"Failed to process agent {agent_name} data: {e}")
         
@@ -133,6 +243,19 @@ def execute_stock_analysis(request: StockAnalysisRequest, run_id: str) -> Dict[s
         # Log detailed agent results for debugging
         for agent_name, result in agent_results.items():
             logger.info(f"Agent {agent_name} result keys: {list(result.keys()) if isinstance(result, dict) else type(result)}")
+            logger.info(f"Agent {agent_name} first 100 chars of data: {str(result)[:100]}...")
+            
+            # Add specific debugging for critical agents
+            if agent_name in ['researcher_bull', 'researcher_bear']:
+                logger.info(f"Agent {agent_name} perspective: {result.get('perspective') if isinstance(result, dict) else 'N/A'}")
+                logger.info(f"Agent {agent_name} confidence: {result.get('confidence') if isinstance(result, dict) else 'N/A'}")
+                logger.info(f"Agent {agent_name} thesis_points count: {len(result.get('thesis_points', [])) if isinstance(result, dict) else 'N/A'}")
+                if isinstance(result, dict) and result.get('thesis_points'):
+                    logger.info(f"Agent {agent_name} first thesis point: {result['thesis_points'][0][:50]}..." if result['thesis_points'] else 'No thesis points')
+            elif agent_name in ['fundamentals', 'sentiment', 'valuation']:
+                logger.info(f"Agent {agent_name} signal: {result.get('signal') if isinstance(result, dict) else 'N/A'}")
+                logger.info(f"Agent {agent_name} confidence: {result.get('confidence') if isinstance(result, dict) else 'N/A'}")
+                logger.info(f"Agent {agent_name} reasoning type: {type(result.get('reasoning')) if isinstance(result, dict) else 'N/A'}")
 
         # Structure the result properly for frontend
         structured_result = {

@@ -238,7 +238,7 @@ class IntelligentBacktester:
                 self._market_volatility.append(volatility)
 
     def get_agent_decision(self, current_date: str, lookback_start: str, portfolio: Dict[str, float]) -> Dict[str, Any]:
-        """获取智能体决策，支持细粒度频率控制"""
+        """获取智能体决策，支持细粒度频率控制和错误恢复"""
         current_date_obj = datetime.strptime(current_date, "%Y-%m-%d")
         self._total_possible_executions += 1
         
@@ -263,13 +263,20 @@ class IntelligentBacktester:
         # 执行需要的agents
         self.logger.info(f"执行agents: {agents_to_execute} at {current_date}")
         
-        # 根据需要执行的agents调整执行策略
-        if len(agents_to_execute) == len(self.agent_frequencies):
-            # 所有agents都需要执行，使用完整workflow
-            result = self._execute_full_workflow(current_date, lookback_start, portfolio)
-        else:
-            # 部分agents执行，使用简化workflow
+        # 根据需要执行的agents调整执行策略 - 优先使用简化workflow
+        if len(agents_to_execute) <= 3:  # 3个或以下agent时使用简化workflow
             result = self._execute_partial_workflow(agents_to_execute, current_date, lookback_start, portfolio)
+        else:
+            # 超过3个agents时才使用完整workflow
+            result = self._execute_full_workflow(current_date, lookback_start, portfolio)
+        
+        # 如果结果为None或失败，返回保守的hold决策
+        if result is None:
+            result = {
+                "decision": {"action": "hold", "quantity": 0},
+                "analyst_signals": {},
+                "execution_type": "error_fallback"
+            }
         
         # 缓存结果
         self.cache_manager.cache_agent_result(cache_key, result)
@@ -277,21 +284,35 @@ class IntelligentBacktester:
         return result
 
     def _execute_full_workflow(self, current_date: str, lookback_start: str, portfolio: Dict[str, float]) -> Dict[str, Any]:
-        """执行完整的agent workflow"""
-        max_retries = 3
+        """执行完整的agent workflow，增加超时和错误处理"""
+        max_retries = 2  # 减少重试次数
+        timeout = 60  # 60秒超时
+        
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    time.sleep(2)
+                    time.sleep(1)
                 
-                result = self.agent(
-                    ticker=self.ticker,
-                    start_date=lookback_start,
-                    end_date=current_date,
-                    portfolio=portfolio,
-                    num_of_news=self.num_of_news,
-                    run_id=f"intelligent_backtest_{self.ticker}_{current_date.replace('-', '')}"
-                )
+                # 设置超时执行
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("Agent execution timeout")
+                
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(timeout)
+                
+                try:
+                    result = self.agent(
+                        ticker=self.ticker,
+                        start_date=lookback_start,
+                        end_date=current_date,
+                        portfolio=portfolio,
+                        num_of_news=self.num_of_news,
+                        run_id=f"intelligent_backtest_{self.ticker}_{current_date.replace('-', '')}"
+                    )
+                finally:
+                    signal.alarm(0)  # 取消超时
 
                 # 解析结果
                 try:
@@ -325,7 +346,7 @@ class IntelligentBacktester:
                         "execution_type": "fallback"
                     }
 
-            except Exception as e:
+            except (TimeoutError, Exception) as e:
                 self.logger.warning(f"完整workflow执行失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
                 if attempt == max_retries - 1:
                     return {
@@ -333,7 +354,7 @@ class IntelligentBacktester:
                         "analyst_signals": {},
                         "execution_type": "error_fallback"
                     }
-                time.sleep(2 ** attempt)
+                time.sleep(1)
 
     def _execute_partial_workflow(self, agents_to_execute: List[str], current_date: str, 
                                 lookback_start: str, portfolio: Dict[str, float]) -> Dict[str, Any]:
@@ -359,35 +380,76 @@ class IntelligentBacktester:
             signals = {}
             
             if 'technical' in agents_to_execute:
-                # 简化技术分析
+                # 简化技术分析 - 非常敏感的阈值
                 if len(df) >= 20:
                     ma20 = df['close'].rolling(20).mean().iloc[-1]
-                    if current_price > ma20 * 1.02:  # 价格超过20日均线2%
+                    if current_price > ma20:  # 价格只要超过20日均线就是多头
                         signals['technical'] = 'bullish'
-                    elif current_price < ma20 * 0.98:  # 价格低于20日均线2%
+                    elif current_price < ma20 * 0.99:  # 价格低于20日均线1%
+                        signals['technical'] = 'bearish'
+                    else:
+                        signals['technical'] = 'neutral'
+                elif len(df) >= 5:
+                    # 如果数据不足20天，使用5日均线
+                    ma5 = df['close'].rolling(5).mean().iloc[-1]
+                    if current_price > ma5:  # 价格只要超过5日均线就是多头
+                        signals['technical'] = 'bullish'
+                    elif current_price < ma5 * 0.995:
                         signals['technical'] = 'bearish'
                     else:
                         signals['technical'] = 'neutral'
             
             if 'sentiment' in agents_to_execute:
-                # 简化情绪分析（基于价格动量）
+                # 简化情绪分析（基于价格动量） - 降低阈值
                 if len(df) >= 5:
                     momentum = (current_price / df['close'].iloc[-5] - 1)
-                    if momentum > 0.03:
+                    if momentum > 0.01:  # 1%上涨
                         signals['sentiment'] = 'positive'
-                    elif momentum < -0.03:
+                    elif momentum < -0.01:  # 1%下跌
                         signals['sentiment'] = 'negative'
                     else:
                         signals['sentiment'] = 'neutral'
             
-            # 基于信号组合做出决策
-            bullish_signals = sum(1 for s in signals.values() if s in ['bullish', 'positive'])
-            bearish_signals = sum(1 for s in signals.values() if s in ['bearish', 'negative'])
+            # 增加成交量分析
+            if 'market_data' in agents_to_execute and len(df) >= 10:
+                recent_volume = df['volume'].tail(3).mean()
+                avg_volume = df['volume'].tail(10).mean()
+                if recent_volume > avg_volume * 1.2:  # 成交量放大20%
+                    signals['volume'] = 'active'
+                elif recent_volume < avg_volume * 0.8:  # 成交量萎缩20%
+                    signals['volume'] = 'quiet'
+                else:
+                    signals['volume'] = 'normal'
             
-            if bullish_signals > bearish_signals and bullish_signals >= 1:
-                decision = {"action": "buy", "quantity": 100}
-            elif bearish_signals > bullish_signals and bearish_signals >= 1:
-                decision = {"action": "sell", "quantity": 100}
+            # 基于信号组合做出决策 - 更灵活的决策逻辑
+            bullish_signals = sum(1 for s in signals.values() if s in ['bullish', 'positive', 'active'])
+            bearish_signals = sum(1 for s in signals.values() if s in ['bearish', 'negative'])
+            neutral_signals = sum(1 for s in signals.values() if s in ['neutral', 'normal', 'quiet'])
+            
+            self.logger.info(f"信号分析: {signals}")
+            self.logger.info(f"多头信号: {bullish_signals}, 空头信号: {bearish_signals}, 中性信号: {neutral_signals}")
+            
+            # 如果当前没有持仓，更容易买入
+            current_position = portfolio.get('stock', 0)
+            
+            if current_position == 0:  # 没有持仓
+                # 积极但理性的买入策略
+                if bullish_signals >= 1:  # 有多头信号就买入
+                    decision = {"action": "buy", "quantity": 100}
+                    self.logger.info("决策: 买入 (无持仓且有多头信号)")
+                elif bearish_signals == 0 and neutral_signals >= 2:  # 没有空头信号且中性信号多
+                    decision = {"action": "buy", "quantity": 50}  
+                    self.logger.info("决策: 小量买入 (无空头风险)")
+            else:  # 有持仓
+                if bearish_signals >= 2:  # 空头信号强就卖出
+                    decision = {"action": "sell", "quantity": min(100, current_position)}
+                    self.logger.info("决策: 卖出 (空头信号强)")
+                elif bullish_signals >= 2:  # 多头信号强就加仓
+                    decision = {"action": "buy", "quantity": 100}
+                    self.logger.info("决策: 加仓 (多头信号强)")
+                elif bearish_signals > bullish_signals and bearish_signals >= 1:  # 空头倾向就减仓
+                    decision = {"action": "sell", "quantity": min(50, current_position)}
+                    self.logger.info("决策: 减仓 (空头倾向)")
             
             return {
                 "decision": decision,
@@ -415,12 +477,24 @@ class IntelligentBacktester:
         print(f"基准: {benchmark_info['name']}")
         
         try:
-            self.benchmark_returns = self.benchmark_calculator.calculate_benchmark_returns(
+            benchmark_data = self.benchmark_calculator.calculate_benchmark_returns(
                 self.ticker, self.start_date, self.end_date)
-            self.logger.info(f"成功计算基准收益率，共{len(self.benchmark_returns)}个数据点")
+            
+            # 确保基准数据与回测日期匹配
+            expected_days = len(dates)
+            if len(benchmark_data) > expected_days:
+                # 取最后expected_days个数据点
+                self.benchmark_returns = benchmark_data[-expected_days:]
+            elif len(benchmark_data) == expected_days:
+                self.benchmark_returns = benchmark_data
+            else:
+                # 如果数据不足，用零填充
+                self.benchmark_returns = benchmark_data + [0.0] * (expected_days - len(benchmark_data))
+                
+            self.logger.info(f"成功计算基准收益率，期望{expected_days}个数据点，实际{len(self.benchmark_returns)}个")
         except Exception as e:
             self.logger.warning(f"基准计算失败，将使用默认基准: {e}")
-            self.benchmark_returns = []
+            self.benchmark_returns = [0.0] * len(dates)
         
         print(f"{'Date':<12} {'Ticker':<6} {'Action':<6} {'Qty':>8} {'Price':>8} {'Cash':>12} {'Position':>8} {'Total Value':>12} {'Execution Type':<15}")
         print("-" * 125)
@@ -441,9 +515,24 @@ class IntelligentBacktester:
             # 获取价格数据并执行交易
             df = self.cache_manager.get_cached_price_data(self.ticker, lookback_start, current_date_str)
             if df is None or df.empty:
+                self.logger.warning(f"无法获取 {current_date_str} 的价格数据，跳过此日期")
+                # 即使没有新数据，也要记录当前portfolio值（保持不变）
+                if self.portfolio_values:
+                    last_value = self.portfolio_values[-1]["Portfolio Value"]
+                    self.portfolio_values.append({
+                        "Date": current_date,
+                        "Portfolio Value": last_value,
+                        "Daily Return": 0.0
+                    })
+                    self.daily_returns.append(0.0)
                 continue
 
             current_price = df.iloc[-1]['open']
+            
+            # 验证价格数据的有效性
+            if current_price <= 0 or pd.isna(current_price):
+                self.logger.warning(f"无效的价格数据: {current_price} on {current_date_str}")
+                continue
             
             # 更新市场状态
             if previous_price is not None:

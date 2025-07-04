@@ -6,6 +6,7 @@ import os
 import logging
 
 from backend.middleware import add_stats_middleware
+from backend.middleware.dual_logging_middleware import setup_dual_logging_middleware
 
 from backend.routers import logs, runs
 # 导入新增的路由器
@@ -23,23 +24,35 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# 初始化日志
-logger = logging.getLogger(__name__)
+# 初始化双写日志系统
+from src.utils.dual_logger import get_dual_logger, logger_manager
+from src.database.models import DatabaseManager
+
+# 初始化数据库和日志系统
+try:
+    db_manager = DatabaseManager()
+    logger_manager.set_database_manager(db_manager)
+    logger = get_dual_logger('backend')
+    logger.info("后端服务启动，双写日志系统已初始化")
+except Exception as e:
+    # 如果双写日志初始化失败，回退到标准日志
+    logger = logging.getLogger(__name__)
+    logger.warning(f"双写日志系统初始化失败，使用标准日志: {e}")
 
 
 @app.on_event("startup")
 async def startup_event():
     """Backend startup event - initialize agents in database"""
     try:
-        logger.info("Initializing agents in database...")
+        logger.info("后端服务启动事件 - 开始初始化代理")
         
         # 导入并运行agent初始化脚本
         from scripts.init_system import init_agents
         init_agents()
         
-        logger.info("Agents initialized successfully")
+        logger.info("代理初始化成功完成")
     except Exception as e:
-        logger.error(f"Failed to initialize agents: {e}")
+        logger.error(f"代理初始化失败: {e}")
         # 不要阻止服务启动，只是记录错误
 
 # Configure CORS (Cross-Origin Resource Sharing)
@@ -54,6 +67,9 @@ app.add_middleware(
     allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allow all headers
 )
+
+# 添加双写日志中间件
+setup_dual_logging_middleware(app)
 
 # 添加API统计中间件
 add_stats_middleware(app)

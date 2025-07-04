@@ -80,9 +80,26 @@ class BenchmarkCalculator:
                 self.logger.warning(f"无法获取{ticker}的价格数据")
                 return []
             
+            # 确保date列是datetime类型
+            df['date'] = pd.to_datetime(df['date'])
+            
+            # 筛选出回测期间的数据
+            start_dt = pd.to_datetime(start_date)
+            end_dt = pd.to_datetime(end_date)
+            
+            mask = (df['date'] >= start_dt) & (df['date'] <= end_dt)
+            filtered_df = df[mask].copy()
+            
+            if filtered_df.empty:
+                self.logger.warning(f"筛选后无{ticker}数据在期间{start_date}到{end_date}")
+                return []
+            
             # 计算日收益率
-            df['daily_return'] = df['close'].pct_change()
-            return df['daily_return'].fillna(0).tolist()
+            filtered_df['daily_return'] = filtered_df['close'].pct_change()
+            returns = filtered_df['daily_return'].fillna(0).tolist()
+            
+            self.logger.info(f"SPE基准: 筛选出{len(returns)}个交易日的数据")
+            return returns
         except Exception as e:
             self.logger.error(f"计算SPE基准失败: {e}")
             return []
