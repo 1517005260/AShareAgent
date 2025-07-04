@@ -977,15 +977,28 @@ def get_price_history(symbol: str, start_date: str = None, end_date: str = None,
                 logger.warning(
                     f"Warning: Even with extended time range, insufficient data ({len(df)} days)")
 
-        # 计算动量指标
+        # 计算动量指标 (修复：添加最小期间要求)
         df["momentum_1m"] = df["close"].pct_change(periods=20)  # 20个交易日约等于1个月
         df["momentum_3m"] = df["close"].pct_change(periods=60)  # 60个交易日约等于3个月
         df["momentum_6m"] = df["close"].pct_change(
             periods=120)  # 120个交易日约等于6个月
+        
+        # 对于数据不足的情况，填充为0
+        if len(df) < 20:
+            df["momentum_1m"] = df["momentum_1m"].fillna(0.0)
+        if len(df) < 60:
+            df["momentum_3m"] = df["momentum_3m"].fillna(0.0)
+        if len(df) < 120:
+            df["momentum_6m"] = df["momentum_6m"].fillna(0.0)
 
         # 计算成交量动量（相对于20日平均成交量的变化）
         df["volume_ma20"] = df["volume"].rolling(window=20).mean()
-        df["volume_momentum"] = df["volume"] / df["volume_ma20"]
+        # 修复：避免除零错误
+        df["volume_momentum"] = np.where(
+            df["volume_ma20"] > 0,
+            df["volume"] / df["volume_ma20"],
+            1.0  # 默认值：无变化
+        )
 
         # 计算波动率指标
         # 1. 历史波动率 (20日)
@@ -998,10 +1011,11 @@ def get_price_history(symbol: str, start_date: str = None, end_date: str = None,
         vol_min = volatility_120d.rolling(window=120).min()
         vol_max = volatility_120d.rolling(window=120).max()
         vol_range = vol_max - vol_min
+        # 修复：改善波动率制度计算，避免系统性返回0
         df["volatility_regime"] = np.where(
-            vol_range > 0,
+            vol_range > 1e-6,  # 使用更小的阈值
             (df["historical_volatility"] - vol_min) / vol_range,
-            0  # 当范围为0时返回0
+            0.5  # 当范围为0时返回中性值而非0
         )
 
         # 3. 波动率Z分数
@@ -1060,15 +1074,23 @@ def get_price_history(symbol: str, start_date: str = None, end_date: str = None,
                 # 使用对数回归
                 lags_log = np.log(list(lags))
                 tau_log = np.log(tau)
-
+                
+                # 检查对数值的有效性
+                if np.any(np.isnan(lags_log)) or np.any(np.isnan(tau_log)):
+                    return np.nan
+                    
                 # 计算回归系数
                 reg = np.polyfit(lags_log, tau_log, 1)
                 hurst = reg[0] / 2.0
-
-                # 只保留基本的数值检查
+                
+                # 修复：更严格的数值检查和范围限制
                 if np.isnan(hurst) or np.isinf(hurst):
                     return np.nan
-
+                    
+                # 限制Hurst指数在合理范围内
+                if hurst < 0 or hurst > 1:
+                    return np.nan
+                    
                 return hurst
 
             except Exception as e:
@@ -1076,10 +1098,14 @@ def get_price_history(symbol: str, start_date: str = None, end_date: str = None,
 
         # 使用对数收益率计算Hurst指数
         log_returns = np.log(df["close"] / df["close"].shift(1))
+        # 修复：改善Hurst指数计算
         df["hurst_exponent"] = log_returns.rolling(
             window=120,
-            min_periods=60  # 要求至少60个数据点
+            min_periods=30  # 降低最小数据点要求
         ).apply(calculate_hurst)
+        
+        # 对于计算失败的情况，使用随机游走默认值
+        df["hurst_exponent"] = df["hurst_exponent"].fillna(0.5)
 
         # 2. 偏度 (20日)
         df["skewness"] = returns.rolling(window=20).skew()
@@ -1201,13 +1227,26 @@ def _handle_nan_values(df: pd.DataFrame) -> pd.DataFrame:
     for col in technical_columns:
         if col in df.columns:
             nan_ratio = df[col].isna().sum() / len(df)
-            if nan_ratio > 0.8:  # 如果80%以上都是NaN，使用默认值
+            # 修复：降低阈值，更积极地处理NaN值
+            if nan_ratio > 0.3:  # 如果30%以上都是NaN，使用默认值
                 if 'momentum' in col:
                     df[col] = df[col].fillna(0.0)
                 elif 'volatility' in col or col in ['atr', 'atr_ratio']:
                     df[col] = df[col].fillna(0.2)  # 使用合理的波动率默认值
                 elif col == 'hurst_exponent':
                     df[col] = df[col].fillna(0.5)  # 随机游走的Hurst指数
+                elif col in ['skewness']:
+                    df[col] = df[col].fillna(0.0)  # 正态分布的偏度
+                elif col in ['kurtosis']:
+                    df[col] = df[col].fillna(0.0)  # 正态分布的峰度（减去3）
+                else:
+                    df[col] = df[col].fillna(0.0)
+            
+            # 额外检查：处理无限值
+            if np.any(np.isinf(df[col])):
+                df[col] = df[col].replace([np.inf, -np.inf], np.nan)
+                if 'volatility' in col or col in ['atr', 'atr_ratio']:
+                    df[col] = df[col].fillna(0.2)
                 else:
                     df[col] = df[col].fillna(0.0)
     

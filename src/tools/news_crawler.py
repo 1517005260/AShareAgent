@@ -8,12 +8,15 @@ import hashlib
 from src.tools.openrouter_config import get_chat_completion, logger as api_logger
 from src.database.data_service import get_data_service
 
-# 导入新的搜索模块
+# 导入 Bing 搜索模块
 try:
-    from src.crawler.search import google_search_sync, SearchOptions
+    from src.crawler.search import (
+        bing_search_sync, 
+        SearchOptions
+    )
 except ImportError:
-    print("警告: 无法导入新的搜索模块，将回退到 akshare")
-    google_search_sync = None
+    print("警告: 无法导入 Bing 搜索模块，将回退到 akshare")
+    bing_search_sync = None
     SearchOptions = None
 
 # 保留 akshare 作为备用
@@ -76,12 +79,61 @@ def extract_domain(url: str) -> str:
         return "未知来源"
 
 
+def try_bing_search(search_query: str, search_options, symbol: str) -> tuple:
+    """
+    使用 Bing 搜索获取财经新闻
+    
+    Args:
+        search_query: 搜索查询字符串
+        search_options: 搜索选项
+        symbol: 股票代码
+    
+    Returns:
+        tuple: (新闻列表, 使用的搜索引擎名称)
+    """
+    if bing_search_sync is None:
+        print("Bing 搜索功能不可用")
+        return [], "none"
+            
+    try:
+        print("使用 Bing 搜索获取财经新闻...")
+        search_response = bing_search_sync(search_query, search_options)
+        
+        if search_response.results:
+            # 过滤掉搜索失败的结果
+            valid_results = [
+                result for result in search_response.results 
+                if (result.title not in ["Bing搜索失败", "搜索失败"] and 
+                    "无法完成搜索" not in result.snippet and
+                    "搜索失败" not in result.snippet)
+            ]
+            
+            if valid_results:
+                # 转换搜索结果为新闻格式
+                news_list = convert_search_results_to_news_format(valid_results, symbol)
+                if news_list:
+                    print(f"通过 Bing 搜索成功获取到 {len(news_list)} 条新闻")
+                    return news_list, "bing"
+                else:
+                    print("Bing 搜索结果转换后为空")
+            else:
+                print("Bing 搜索返回的都是失败结果")
+        else:
+            print("Bing 搜索未返回有效结果")
+            
+    except Exception as e:
+        print(f"Bing 搜索出错: {e}")
+    
+    print("Bing 搜索失败，将回退到 akshare")
+    return [], "none"
+
+
 def convert_search_results_to_news_format(search_results, symbol: str) -> list:
     """
-    将搜索结果转换为现有新闻格式
+    将 Bing 搜索结果转换为新闻格式，针对财经网站优化
 
     Args:
-        search_results: Google 搜索结果
+        search_results: Bing 搜索结果
         symbol: 股票代码
 
     Returns:
@@ -91,20 +143,68 @@ def convert_search_results_to_news_format(search_results, symbol: str) -> list:
 
     for result in search_results:
         # 过滤掉明显不相关的结果
-        if any(keyword in result.title.lower() for keyword in ['招聘', '求职', '广告', '登录', '注册']):
+        if any(keyword in result.title.lower() for keyword in ['招聘', '求职', '广告', '登录', '注册', '404', 'error']):
             continue
+            
+        # 优先处理财经网站的结果
+        source_domain = extract_domain(result.link)
+        
+        # 检查是否是主要财经网站
+        financial_sites = {
+            'finance.sina.com.cn': '新浪财经',
+            'quote.eastmoney.com': '东方财富网',
+            'stock.eastmoney.com': '东方财富网', 
+            'data.eastmoney.com': '东方财富网',
+            'guba.eastmoney.com': '东方财富股吧',
+            'money.163.com': '网易财经',
+            'finance.163.com': '网易财经',
+            'cnstock.com': '中国证券网',
+            'cs.com.cn': '中证网',
+            'hexun.com': '和讯网',
+            'stock.hexun.com': '和讯股票',
+            'caijing.com.cn': '财经网',
+            'yicai.com': '第一财经',
+            'cls.cn': '财联社',
+            'wallstreetcn.com': '华尔街见闻'
+        }
+        
+        # 确定新闻来源
+        news_source = financial_sites.get(source_domain, source_domain)
+        
+        # 清理标题（移除网站URL等无用信息）
+        clean_title = result.title
+        
+        # 移除常见的URL前缀
+        url_patterns = [
+            r'^https?://[^\s]+\s*[-·›»]\s*',
+            r'^[^\s]+\.com[^\s]*\s*[-·›»]\s*',
+            r'^[^\s]+\.cn[^\s]*\s*[-·›»]\s*',
+        ]
+        
+        for pattern in url_patterns:
+            import re
+            clean_title = re.sub(pattern, '', clean_title, flags=re.IGNORECASE)
+        
+        # 如果标题还是包含URL，尝试从snippet中提取更好的标题
+        if any(x in clean_title.lower() for x in ['http', 'www.', '.com', '.cn']):
+            if result.snippet and len(result.snippet) > 20:
+                # 从snippet的第一句话提取标题
+                import re
+                sentences = re.split(r'[。！？\.\!\?]', result.snippet)
+                if sentences and len(sentences[0]) > 10:
+                    clean_title = sentences[0].strip()
 
         # 尝试从snippet中提取时间信息
         publish_time = None
         if result.snippet:
-            # 查找常见的时间模式
             import re
             time_patterns = [
+                r'(\d{4}年\d{1,2}月\d{1,2}日)',
+                r'(\d{4}-\d{2}-\d{2})',
                 r'(\d{1,2}天前)',
                 r'(\d{1,2}小时前)',
-                r'(\d{4}-\d{2}-\d{2})',
-                r'(\d{4}年\d{1,2}月\d{1,2}日)',
-                r'(\d{2}-\d{2})'
+                r'(\d{2}-\d{2})',
+                r'(昨天|今天|前天)'
             ]
 
             for pattern in time_patterns:
@@ -112,34 +212,53 @@ def convert_search_results_to_news_format(search_results, symbol: str) -> list:
                 if match:
                     time_str = match.group(1)
                     try:
+                        from datetime import datetime, timedelta
+                        
                         # 处理相对时间
                         if '天前' in time_str:
                             days = int(time_str.replace('天前', ''))
                             publish_date = datetime.now() - timedelta(days=days)
-                            publish_time = publish_date.strftime(
-                                '%Y-%m-%d %H:%M:%S')
+                            publish_time = publish_date.strftime('%Y-%m-%d %H:%M:%S')
                         elif '小时前' in time_str:
                             hours = int(time_str.replace('小时前', ''))
                             publish_date = datetime.now() - timedelta(hours=hours)
-                            publish_time = publish_date.strftime(
-                                '%Y-%m-%d %H:%M:%S')
-                        # YYYY-MM-DD格式
+                            publish_time = publish_date.strftime('%Y-%m-%d %H:%M:%S')
+                        elif time_str == '今天':
+                            publish_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        elif time_str == '昨天':
+                            publish_date = datetime.now() - timedelta(days=1)
+                            publish_time = publish_date.strftime('%Y-%m-%d %H:%M:%S')
+                        elif time_str == '前天':
+                            publish_date = datetime.now() - timedelta(days=2)
+                            publish_time = publish_date.strftime('%Y-%m-%d %H:%M:%S')
                         elif '-' in time_str and len(time_str) == 10:
                             publish_time = f"{time_str} 00:00:00"
+                        elif '年' in time_str and '月' in time_str and '日' in time_str:
+                            # 转换 "2025年7月3日" 格式
+                            date_match = re.search(r'(\d{4})年(\d{1,2})月(\d{1,2})日', time_str)
+                            if date_match:
+                                year, month, day = date_match.groups()
+                                publish_time = f"{year}-{month.zfill(2)}-{day.zfill(2)} 00:00:00"
                         break
                     except:
                         continue
 
+        # 增强内容信息
+        content = result.snippet or clean_title
+        if len(content) < 50 and result.snippet:
+            content = result.snippet
+            
         news_item = {
-            "title": result.title,
-            "content": result.snippet or result.title,
-            "source": extract_domain(result.link),
+            "title": clean_title,
+            "content": content,
+            "source": news_source,
             "url": result.link,
             "keyword": symbol,
-            "search_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # 搜索时间
+            "search_time": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "search_engine": "bing"  # 标记搜索引擎
         }
 
-        # 只有当能提取到发布时间时才添加，否则不包含这个字段
+        # 只有当能提取到发布时间时才添加
         if publish_time:
             news_item["publish_time"] = publish_time
 
@@ -256,54 +375,50 @@ def get_stock_news(symbol: str, max_news: int = 10, date: str = None) -> list:
     need_more_news = max_news - len(cached_news)
     fetch_count = max(need_more_news, max_news)  # 至少获取请求的数量
 
-    # 优先尝试使用新的 Google 搜索方法
+    # 优先尝试使用 Bing 搜索
     new_news_list = []
-    if google_search_sync and SearchOptions:
+    used_engine = "unknown"
+    if SearchOptions and bing_search_sync:
         try:
-            print("使用 Google 搜索获取新闻...")
+            print("使用 Bing 搜索获取财经新闻...")
 
             # 构建搜索查询
             search_query = build_search_query(symbol, date)
             print(f"搜索查询: {search_query}")
 
-            # 执行搜索
+            # 执行 Bing 搜索
             search_options = SearchOptions(
                 limit=fetch_count * 2,  # 获取更多结果以便过滤
                 timeout=30000,
                 locale="zh-CN"
             )
 
-            search_response = google_search_sync(search_query, search_options)
-
-            if search_response.results:
-                # 转换搜索结果为新闻格式
-                new_news_list = convert_search_results_to_news_format(
-                    search_response.results, symbol)
-
-                print(f"通过 Google 搜索成功获取到{len(new_news_list)}条新闻")
-            else:
-                print("Google 搜索未返回有效结果，尝试回退到 akshare")
+            new_news_list, used_engine = try_bing_search(search_query, search_options, symbol)
 
         except Exception as e:
-            print(f"Google 搜索获取新闻时出错: {e}，回退到 akshare")
+            print(f"Bing 搜索获取新闻时出错: {e}，回退到 akshare")
+            new_news_list, used_engine = [], "none"
 
-    # 如果 Google 搜索失败，回退到 akshare
+    # 如果 Bing 搜索失败，回退到 akshare
     if not new_news_list:
         print("使用 akshare 获取新闻...")
         new_news_list = get_stock_news_via_akshare(symbol, fetch_count)
+        used_engine = "akshare"
 
     # 保存新获取的新闻到数据库
     saved_count = 0
     if new_news_list:
         try:
+            # 使用实际使用的搜索引擎名称
+            method = used_engine
             saved_count = data_service.save_stock_news(
                 ticker=symbol,
                 date=cache_date,
-                method='google_search' if google_search_sync else 'akshare',
+                method=method,
                 query=f"股票 {symbol} 新闻",
                 news_data=new_news_list
             )
-            print(f"成功保存{saved_count}条新闻到数据库")
+            print(f"成功保存{saved_count}条新闻到数据库 (使用{method})")
         except Exception as e:
             print(f"保存新闻到数据库失败: {e}")
             saved_count = 0

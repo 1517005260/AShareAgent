@@ -27,10 +27,20 @@ def macro_analyst_agent(state: AgentState):
     # 获取大量新闻数据（最多100条），传递正确的日期参数
     news_list = get_stock_news(symbol, max_news=100, date=end_date)
 
-    # 过滤七天前的新闻（只对有publish_time字段的新闻进行过滤）
+    # 过滤七天前的新闻和失败的搜索结果
     cutoff_date = datetime.now() - timedelta(days=7)
     recent_news = []
     for news in news_list:
+        # 过滤掉搜索失败的新闻
+        if news.get('title') == '搜索失败' or '搜索失败' in news.get('title', ''):
+            logger.warning(f"过滤掉搜索失败的新闻: {news.get('title', '')}")
+            continue
+            
+        # 过滤掉明显无效的新闻
+        if news.get('content') and '无法完成搜索，错误信息' in news.get('content', ''):
+            logger.warning(f"过滤掉无效新闻: {news.get('title', '')}")
+            continue
+            
         if 'publish_time' in news:
             try:
                 news_date = datetime.strptime(
@@ -46,14 +56,46 @@ def macro_analyst_agent(state: AgentState):
 
     logger.info(f"获取到 {len(recent_news)} 条七天内的新闻")
 
-    # 如果没有获取到新闻，返回默认结果
+    # 如果没有获取到新闻，尝试强制刷新获取新的新闻数据
     if not recent_news:
-        logger.warning(f"未获取到 {symbol} 的最近新闻，无法进行宏观分析")
+        logger.warning(f"未获取到 {symbol} 的最近有效新闻，尝试强制刷新...")
+        
+        # 尝试直接使用akshare获取新闻，跳过缓存
+        try:
+            import akshare as ak
+            fresh_news_df = ak.stock_news_em(symbol=symbol)
+            if fresh_news_df is not None and not fresh_news_df.empty:
+                fresh_news_list = []
+                for _, row in fresh_news_df.head(10).iterrows():
+                    try:
+                        content = row.get("新闻内容", "") or row.get("新闻标题", "")
+                        if len(content.strip()) > 10:
+                            fresh_news_item = {
+                                "title": row.get("新闻标题", "").strip(),
+                                "content": content.strip(),
+                                "publish_time": str(row.get("发布时间", "")),
+                                "source": row.get("文章来源", "").strip(),
+                                "url": row.get("新闻链接", "").strip(),
+                                "keyword": symbol
+                            }
+                            fresh_news_list.append(fresh_news_item)
+                    except:
+                        continue
+                
+                if fresh_news_list:
+                    logger.info(f"通过akshare强制刷新获取到 {len(fresh_news_list)} 条新闻")
+                    recent_news = fresh_news_list
+        except Exception as e:
+            logger.error(f"强制刷新新闻失败: {e}")
+    
+    # 如果仍然没有获取到新闻，返回默认结果
+    if not recent_news:
+        logger.warning(f"最终未获取到 {symbol} 的最近新闻，无法进行宏观分析")
         message_content = {
             "macro_environment": "neutral",
             "impact_on_stock": "neutral",
-            "key_factors": [],
-            "reasoning": "未获取到最近新闻，无法进行宏观分析"
+            "key_factors": ["未获取到有效的新闻数据", "新闻搜索系统可能存在问题", "建议检查新闻数据源"],
+            "reasoning": "未获取到最近有效新闻，可能是新闻搜索失败或数据源问题。建议检查新闻爬虫和数据库状态。"
         }
     else:
         # 获取宏观分析结果

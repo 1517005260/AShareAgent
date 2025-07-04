@@ -304,6 +304,13 @@ def agent_endpoint(agent_name: str, description: str = ""):
                 # --- 执行Agent核心逻辑 ---
                 # 直接调用原始 agent_func
                 result = agent_func(state)
+                
+                # 立即从state中提取并保存本agent的推理数据，避免被后续agent覆盖
+                if "agent_reasoning" in state.get("metadata", {}):
+                    agent_reasoning_key = f"{agent_name}_reasoning"
+                    # 保存到agent特定的键中
+                    result.setdefault("metadata", {})
+                    result["metadata"][agent_reasoning_key] = state["metadata"]["agent_reasoning"]
                 # --------------------------
 
                 timestamp_end = datetime.now(UTC)
@@ -340,8 +347,20 @@ def agent_endpoint(agent_name: str, description: str = ""):
 
                 # 从状态中提取推理细节（如果有）
                 reasoning_details = None
-                if "agent_reasoning" in result.get("metadata", {}):
+                # 首先尝试从返回结果中获取（使用agent特定的键）
+                agent_reasoning_key = f"{agent_name}_reasoning"
+                if agent_reasoning_key in result.get("metadata", {}):
+                    reasoning_details = result["metadata"][agent_reasoning_key]
+                # 兼容旧的通用键
+                elif "agent_reasoning" in result.get("metadata", {}):
                     reasoning_details = result["metadata"]["agent_reasoning"]
+                # 如果返回结果中没有，尝试从输入状态中获取
+                elif agent_reasoning_key in state.get("metadata", {}):
+                    reasoning_details = state["metadata"][agent_reasoning_key]
+                elif "agent_reasoning" in state.get("metadata", {}):
+                    reasoning_details = state["metadata"]["agent_reasoning"]
+                
+                if reasoning_details:
                     api_state.update_agent_data(
                         agent_name,
                         "reasoning",

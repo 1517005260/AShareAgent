@@ -580,7 +580,7 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
       )}
 
       {/* 投资组合管理分析 */}
-      {agent_results.portfolio_management && (
+      {(analysisData?.action || data?.final_decision) && (
         <Card
           title={<span><DollarOutlined /> 投资组合管理分析</span>}
           style={{ marginBottom: '24px' }}
@@ -589,29 +589,29 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={8}>
               <Text strong>交易行动: </Text>
-              <Tag color={getSignalColor(agent_results.portfolio_management.action)} icon={<DollarOutlined />}>
-                {agent_results.portfolio_management.action?.toUpperCase() || 'UNKNOWN'}
+              <Tag color={getSignalColor(analysisData?.action || data?.final_decision?.action)} icon={<DollarOutlined />}>
+                {(analysisData?.action || data?.final_decision?.action)?.toUpperCase() || 'UNKNOWN'}
               </Tag>
             </Col>
             <Col span={8}>
               <Text strong>交易数量: </Text>
               <Text type="secondary">
-                {agent_results.portfolio_management.quantity || '-'}
+                {(analysisData?.quantity || data?.final_decision?.quantity || '-')}
               </Text>
             </Col>
             <Col span={8}>
               <Text strong>决策信心: </Text>
               <Tag color="blue">
-                {formatConfidence(agent_results.portfolio_management.confidence)}
+                {formatConfidence(analysisData?.confidence || data?.final_decision?.confidence)}
               </Tag>
             </Col>
           </Row>
 
-          {agent_results.portfolio_management.agent_signals && (
+          {(analysisData?.agent_signals || data?.final_decision?.agent_signals) && (
             <div style={{ marginTop: '16px' }}>
               <Divider orientation="left" plain>各分析师意见</Divider>
               <Row gutter={[16, 8]}>
-                {agent_results.portfolio_management.agent_signals.map((signal: any, index: number) => (
+                {(analysisData?.agent_signals || data?.final_decision?.agent_signals)?.map((signal: any, index: number) => (
                   <Col span={12} key={index}>
                     <Card size="small" style={{ background: '#fafafa' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -636,11 +636,11 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
             </div>
           )}
 
-          {agent_results.portfolio_management.reasoning && (
+          {(analysisData?.reasoning || data?.final_decision?.reasoning) && (
             <div style={{ marginTop: '16px' }}>
               <Divider orientation="left" plain>决策理由</Divider>
               <Paragraph style={{ background: '#f5f5f5', padding: '12px', borderRadius: '4px' }}>
-                {agent_results.portfolio_management.reasoning}
+                {analysisData?.reasoning || data?.final_decision?.reasoning}
               </Paragraph>
             </div>
           )}

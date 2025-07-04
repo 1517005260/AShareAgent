@@ -195,7 +195,7 @@ class StructuredTerminalOutput:
                         f"{SYMBOLS['vertical']} {SYMBOLS['section_prefix']}各分析师意见:")
 
                     for signal_info in data["agent_signals"]:
-                        agent = signal_info.get("agent", "")
+                        agent = signal_info.get("agent_name", signal_info.get("agent", ""))
                         signal = signal_info.get("signal", "")
                         conf = signal_info.get("confidence", 1.0)
 
@@ -215,37 +215,133 @@ class StructuredTerminalOutput:
                         result.append(
                             f"{SYMBOLS['vertical']}   • {agent}: {signal_icon} {signal} (置信度: {conf_str})")
 
-                # 决策理由
+                # 显示决策理由
                 if "reasoning" in data:
                     reasoning = data["reasoning"]
                     result.append(
                         f"{SYMBOLS['vertical']} {SYMBOLS['section_prefix']}决策理由:")
                     if isinstance(reasoning, str):
                         # 将长文本拆分为多行，每行不超过width-4个字符
-                        for i in range(0, len(reasoning), width-4):
-                            line = reasoning[i:i+width-4]
-                            result.append(f"{SYMBOLS['vertical']}   {line}")
+                        words = reasoning.split()
+                        current_line = f"{SYMBOLS['vertical']}   "
+                        for word in words:
+                            if len(current_line + word + " ") > width:
+                                result.append(current_line.rstrip())
+                                current_line = f"{SYMBOLS['vertical']}   " + word + " "
+                            else:
+                                current_line += word + " "
+                        if current_line.strip() != f"{SYMBOLS['vertical']}":
+                            result.append(current_line.rstrip())
+                
+                # 显示其他详细字段
+                remaining_data = {k: v for k, v in data.items() 
+                                if k not in ["action", "quantity", "confidence", "agent_signals", "reasoning"]}
+                if remaining_data:
+                    tree_lines = self._format_dict_as_tree(remaining_data)
+                    for line in tree_lines:
+                        result.append(f"{SYMBOLS['vertical']} {line}")
             else:
                 # 标准处理其他agent
-                # 提取信号和置信度（如果有）
-                if "signal" in data:
-                    signal = data.get("signal", "")
-                    signal_icon = STATUS_ICONS.get(signal.lower(), "")
-                    result.append(
-                        f"{SYMBOLS['vertical']} 信号: {signal_icon} {signal}")
+                # 特殊处理researcher agents
+                if agent_name in ["researcher_bull_agent", "researcher_bear_agent"]:
+                    # 显示观点和置信度
+                    if "perspective" in data:
+                        perspective = data.get("perspective", "")
+                        result.append(f"{SYMBOLS['vertical']} 观点:  {perspective.upper()}")
+                    
+                    if "confidence" in data:
+                        conf = data.get("confidence", "")
+                        if isinstance(conf, (int, float)) and conf <= 1:
+                            conf_str = f"{conf*100:.1f}%"
+                        else:
+                            conf_str = str(conf)
+                        result.append(f"{SYMBOLS['vertical']} 置信度: {conf_str}")
+                    
+                    # 显示论点
+                    if "thesis_points" in data:
+                        thesis_points = data.get("thesis_points", [])
+                        result.append(f"{SYMBOLS['vertical']} 论点")
+                        for point in thesis_points:
+                            result.append(f"{SYMBOLS['vertical']} +")
+                            result.append(f"{SYMBOLS['vertical']} + {point}")
+                    
+                    # 显示推理
+                    if "reasoning" in data:
+                        reasoning = data.get("reasoning", "")
+                        result.append(f"{SYMBOLS['vertical']} {reasoning}")
+                    
+                    # 不显示重复的详细数据，直接返回
+                elif agent_name == "technical_analyst_agent":
+                    # 特殊处理技术分析
+                    if "signal" in data:
+                        signal = data.get("signal", "")
+                        signal_icon = STATUS_ICONS.get(signal.lower(), "")
+                        result.append(f"{SYMBOLS['vertical']} 信号: {signal_icon} {signal}")
 
-                if "confidence" in data:
-                    conf = data.get("confidence", "")
-                    if isinstance(conf, (int, float)) and conf <= 1:
-                        conf_str = f"{conf*100:.0f}%"
-                    else:
-                        conf_str = str(conf)
-                    result.append(f"{SYMBOLS['vertical']} 置信度: {conf_str}")
+                    if "confidence" in data:
+                        conf = data.get("confidence", "")
+                        if isinstance(conf, (int, float)) and conf <= 1:
+                            conf_str = f"{conf*100:.0f}%"
+                        else:
+                            conf_str = str(conf)
+                        result.append(f"{SYMBOLS['vertical']} 置信度: {conf_str}")
+                    
+                    # 显示策略信号详情
+                    if "strategy_signals" in data:
+                        result.append(f"{SYMBOLS['vertical']} 策略信号详情")
+                        strategy_signals = data.get("strategy_signals", {})
+                        for strategy, details in strategy_signals.items():
+                            strategy_name = strategy.upper().replace('_', ' ')
+                            signal = details.get('signal', 'neutral')
+                            confidence = details.get('confidence', 50)
+                            
+                            # 安全地格式化置信度
+                            if isinstance(confidence, (int, float)):
+                                conf_str = f"{confidence:.0f}%"
+                            elif isinstance(confidence, str):
+                                # 如果是字符串，尝试去掉%号并转换
+                                try:
+                                    conf_val = float(confidence.replace('%', ''))
+                                    conf_str = f"{conf_val:.0f}%"
+                                except:
+                                    conf_str = str(confidence)
+                            else:
+                                conf_str = str(confidence)
+                                
+                            result.append(f"{SYMBOLS['vertical']} {strategy_name}: {signal}")
+                            result.append(f"{SYMBOLS['vertical']} 置信度: {conf_str}")
+                            
+                            # 显示指标
+                            metrics = details.get('metrics', {})
+                            for metric, value in metrics.items():
+                                if isinstance(value, (int, float)):
+                                    if metric in ['adx', 'trend_strength']:
+                                        result.append(f"{SYMBOLS['vertical']} {metric}: {value:.4f}")
+                                    else:
+                                        result.append(f"{SYMBOLS['vertical']} {metric}: {value}")
+                                else:
+                                    result.append(f"{SYMBOLS['vertical']} {metric}: {value}")
+                else:
+                    # 提取信号和置信度（如果有）
+                    if "signal" in data:
+                        signal = data.get("signal", "")
+                        signal_icon = STATUS_ICONS.get(signal.lower(), "")
+                        result.append(
+                            f"{SYMBOLS['vertical']} 信号: {signal_icon} {signal}")
 
-            # 添加其他数据
-            tree_lines = self._format_dict_as_tree(data)
-            for line in tree_lines:
-                result.append(f"{SYMBOLS['vertical']} {line}")
+                    if "confidence" in data:
+                        conf = data.get("confidence", "")
+                        if isinstance(conf, (int, float)) and conf <= 1:
+                            conf_str = f"{conf*100:.0f}%"
+                        else:
+                            conf_str = str(conf)
+                        result.append(f"{SYMBOLS['vertical']} 置信度: {conf_str}")
+
+            # 添加其他数据 (但跳过特殊处理的agents的详细数据)
+            if agent_name not in ["researcher_bull_agent", "researcher_bear_agent", "technical_analyst_agent"]:
+                tree_lines = self._format_dict_as_tree(data)
+                for line in tree_lines:
+                    result.append(f"{SYMBOLS['vertical']} {line}")
         elif isinstance(data, list):
             for i, item in enumerate(data):
                 prefix = SYMBOLS["tree_last"] if i == len(

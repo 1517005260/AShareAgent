@@ -62,7 +62,7 @@ def researcher_bull_agent(state: AgentState):
             return float(confidence_value.replace('%', '')) / 100
         return float(confidence_value) if confidence_value else 0.0
 
-    # Enhanced Technical Analysis with A-share characteristics
+    # Enhanced Technical Analysis with A-share characteristics - 多头角度
     tech_confidence = _parse_confidence(technical_signals.get('confidence', 0))
     if technical_signals["signal"] == "bullish":
         # 强化技术信号分析
@@ -70,20 +70,20 @@ def researcher_bull_agent(state: AgentState):
         bullish_points.append(f"技术面呈现{strength}看多信号，置信度{tech_confidence:.1%}")
         # A股特色：考虑涨跌停板影响
         if tech_confidence > 0.8:
-            bullish_points.append("技术突破明显，可能触及涨停板")
+            bullish_points.append("技术突破明确，符合A股强势特征")
         weighted_scores.append(tech_confidence * weights['technical'])
         signal_strengths.append(tech_confidence)
     else:
-        # 更细致的弱势分析
-        if tech_confidence < 0.3:
-            bullish_points.append("技术面暂时走弱，但可能构筑底部区域")
-            weighted_scores.append(0.4 * weights['technical'])  # 提高反转预期
+        # 多头视角：即使技术面偏弱，也寻找积极因素
+        if tech_confidence > 0.5:
+            bullish_points.append("技术面虽有调整，但基础仍然坚实")
+            weighted_scores.append(0.6 * weights['technical'])
         else:
-            bullish_points.append("技术面中性偏弱，等待突破机会")
-            weighted_scores.append(0.3 * weights['technical'])
-        signal_strengths.append(0.4)
+            bullish_points.append("技术面呈现底部特征，具备反转潜力")
+            weighted_scores.append(0.5 * weights['technical'])  # 多头反转预期
+        signal_strengths.append(0.6)  # 多头视角下的基础分数
 
-    # Enhanced Fundamental Analysis
+    # Enhanced Fundamental Analysis - 多头角度
     fund_confidence = _parse_confidence(fundamental_signals.get('confidence', 0))
     if fundamental_signals["signal"] == "bullish":
         quality = "优秀" if fund_confidence > 0.8 else "良好" if fund_confidence > 0.6 else "一般"
@@ -94,16 +94,16 @@ def researcher_bull_agent(state: AgentState):
         weighted_scores.append(fund_confidence * weights['fundamental'])
         signal_strengths.append(fund_confidence)
     else:
-        # 寻找基本面改善催化剂
-        if fund_confidence > 0.4:
-            bullish_points.append("基本面虽有压力，但具备改善潜力")
-            weighted_scores.append(0.5 * weights['fundamental'])
+        # 多头视角：寻找基本面改善催化剂
+        if fund_confidence > 0.6:
+            bullish_points.append("基本面数据扎实，业绩改善空间可期")
+            weighted_scores.append(0.7 * weights['fundamental'])
         else:
-            bullish_points.append("基本面承压，需要关注拐点信号")
-            weighted_scores.append(0.3 * weights['fundamental'])
-        signal_strengths.append(0.4)
+            bullish_points.append("基本面具备长期投资价值，静待拐点确认")
+            weighted_scores.append(0.5 * weights['fundamental'])
+        signal_strengths.append(0.6)  # 多头视角下的基础分数
 
-    # Enhanced Valuation Analysis
+    # Enhanced Valuation Analysis - 多头角度
     val_confidence = _parse_confidence(valuation_signals.get('confidence', 0))
     if valuation_signals["signal"] == "bullish":
         value_level = "严重低估" if val_confidence > 0.8 else "低估" if val_confidence > 0.6 else "相对低估"
@@ -113,15 +113,16 @@ def researcher_bull_agent(state: AgentState):
         weighted_scores.append(val_confidence * weights['valuation'])
         signal_strengths.append(val_confidence)
     else:
-        if val_confidence < 0.4:
-            bullish_points.append("估值偏高但成长性可能支撑")
-            weighted_scores.append(0.3 * weights['valuation'])
+        # 多头视角：即使估值偏高，也寻找合理性
+        if val_confidence > 0.7:
+            bullish_points.append("估值反映成长预期，业绩兑现将支撑股价")
+            weighted_scores.append(0.6 * weights['valuation'])
         else:
-            bullish_points.append("估值合理，等待业绩兑现")
+            bullish_points.append("估值处于合理区间，长期配置价值显现")
             weighted_scores.append(0.5 * weights['valuation'])
-        signal_strengths.append(0.4)
+        signal_strengths.append(0.6)  # 多头视角下的基础分数
 
-    # Enhanced Sentiment Analysis
+    # Enhanced Sentiment Analysis - 多头角度
     sent_confidence = _parse_confidence(sentiment_signals.get('confidence', 0))
     if sentiment_signals["signal"] == "bullish":
         mood = "高涨" if sent_confidence > 0.7 else "积极"
@@ -129,14 +130,14 @@ def researcher_bull_agent(state: AgentState):
         weighted_scores.append(sent_confidence * weights['sentiment'])
         signal_strengths.append(sent_confidence)
     else:
-        # 情绪低迷时寻找反转机会
-        if sent_confidence < 0.3:
-            bullish_points.append("市场情绪过度悲观，存在反转机会")
-            weighted_scores.append(0.6 * weights['sentiment'])  # 反向指标
+        # 多头视角：情绪低迷时寻找反转机会
+        if sent_confidence > 0.4:
+            bullish_points.append("市场情绪趋于理性，为理性配置创造机会")
+            weighted_scores.append(0.6 * weights['sentiment'])
         else:
-            bullish_points.append("市场情绪谨慎，需要催化剂")
-            weighted_scores.append(0.3 * weights['sentiment'])
-        signal_strengths.append(0.4)
+            bullish_points.append("市场情绪偏谨慎，但优质标的获得关注")
+            weighted_scores.append(0.5 * weights['sentiment'])  # 反向指标
+        signal_strengths.append(0.6)  # 多头视角下的基础分数
 
     # Calculate sophisticated confidence score
     weighted_confidence = sum(weighted_scores)
@@ -186,12 +187,18 @@ def researcher_bull_agent(state: AgentState):
     if show_reasoning:
         show_agent_reasoning(message_content, "Bullish Researcher")
     
-    # 始终保存推理信息到metadata供API使用
+    # 保存推理信息到agent特定的键中，避免被其他agent覆盖
     state["metadata"]["agent_reasoning"] = message_content
+    state["metadata"]["researcher_bull_agent_reasoning"] = message_content
 
     show_workflow_status("Bullish Researcher", "completed")
+    
+    # 确保返回结果中包含我们的数据
+    result_metadata = state["metadata"].copy()
+    result_metadata["researcher_bull_agent_reasoning"] = message_content
+    
     return {
         "messages": state["messages"] + [message],
         "data": state["data"],
-        "metadata": state["metadata"],
+        "metadata": result_metadata,
     }

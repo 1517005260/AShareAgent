@@ -90,6 +90,21 @@ def format_decision_display(decisions: List[Dict], ticker: str = None) -> str:
             section = format_portfolio_analysis(decision_data)
             if section:
                 report_lines.append(section)
+                
+        elif 'bull' in agent_name.lower() or 'bullish' in agent_name.lower():
+            section = format_bullish_analysis(decision_data)
+            if section:
+                report_lines.append(section)
+                
+        elif 'bear' in agent_name.lower() or 'bearish' in agent_name.lower():
+            section = format_bearish_analysis(decision_data)
+            if section:
+                report_lines.append(section)
+                
+        elif 'debate' in agent_name.lower():
+            section = format_debate_analysis(decision_data)
+            if section:
+                report_lines.append(section)
     
     # 如果没有足够的数据，生成示例格式
     if len(report_lines) <= 4:
@@ -113,23 +128,24 @@ def format_technical_analysis(data: Dict[str, Any]) -> str:
     # 策略信号详情
     strategy_signals = data.get('strategy_signals', {})
     if strategy_signals:
-        lines.append(f"║ ├─ signal: {signal}")
-        lines.append(f"║ ├─ confidence: {confidence:.0f}%")
-        lines.append("║ └─ strategy_signals:")
+        lines.append("║ 策略信号详情")
         
         for strategy, details in strategy_signals.items():
-            lines.append(f"║   ├─ {strategy}:")
-            lines.append(f"║     ├─ signal: {details.get('signal', 'neutral')}")
-            lines.append(f"║     ├─ confidence: {details.get('confidence', 50):.0f}%")
+            strategy_name = strategy.upper().replace('_', ' ')
+            signal_val = details.get('signal', 'neutral')
+            confidence_val = details.get('confidence', 50)
+            lines.append(f"║ {strategy_name}: {signal_val}")
+            lines.append(f"║ 置信度: {confidence_val:.0f}%")
             
             metrics = details.get('metrics', {})
-            if metrics:
-                lines.append("║     └─ metrics:")
-                for metric, value in metrics.items():
-                    if isinstance(value, (int, float)):
-                        lines.append(f"║       ├─ {metric}: {value:.2f}")
+            for metric, value in metrics.items():
+                if isinstance(value, (int, float)):
+                    if metric in ['adx', 'trend_strength']:
+                        lines.append(f"║ {metric}: {value:.4f}")
                     else:
-                        lines.append(f"║       ├─ {metric}: {value}")
+                        lines.append(f"║ {metric}: {value}")
+                else:
+                    lines.append(f"║ {metric}: {value}")
     
     lines.append("╚" + "═" * 78 + "╝")
     lines.append("")
@@ -139,8 +155,8 @@ def format_technical_analysis(data: Dict[str, Any]) -> str:
 
 def format_fundamental_analysis(data: Dict[str, Any]) -> str:
     """格式化基本面分析"""
-    signal = data.get('signal', 'bearish')
-    confidence = data.get('confidence', 75)
+    signal = data.get('signal', 'neutral')
+    confidence = data.get('confidence', 50)
     
     lines = []
     lines.append("╔" + "═" * 35 + " 📝 基本面分析 " + "═" * 35 + "╗")
@@ -234,7 +250,8 @@ def format_risk_analysis(data: Dict[str, Any]) -> str:
             else:
                 lines.append(f"║   ├─ {metric}: {value}")
     
-    lines.append("║ └─ reasoning: Risk Score 4/10: Market Risk=4, Volatility=51.40%, VaR=-5.24%")
+    reasoning = data.get('reasoning', 'Risk assessment completed')
+    lines.append(f"║ └─ reasoning: {reasoning}")
     lines.append("╚" + "═" * 78 + "╝")
     lines.append("")
     
@@ -249,11 +266,9 @@ def format_macro_analysis(data: Dict[str, Any]) -> str:
     lines.append("╔" + "═" * 33 + " 🌍 针对所选股宏观分析 " + "═" * 33 + "╗")
     lines.append(f"║ ├─ macro_environment: {macro_environment}")
     
-    impact_on_stock = data.get('impact_on_stock', {})
+    impact_on_stock = data.get('impact_on_stock', 'neutral')
     if impact_on_stock:
-        lines.append("║ ├─ impact_on_stock:")
-        for stock, impact in impact_on_stock.items():
-            lines.append(f"║   ├─ {stock}: {impact}")
+        lines.append(f"║ ├─ impact_on_stock: {impact_on_stock}")
     
     key_factors = data.get('key_factors', [])
     if key_factors:
@@ -261,11 +276,9 @@ def format_macro_analysis(data: Dict[str, Any]) -> str:
         for factor in key_factors:
             lines.append(f"║   ├─ {factor}")
     
-    reasoning = data.get('reasoning', {})
+    reasoning = data.get('reasoning', '')
     if reasoning:
-        lines.append("║ └─ reasoning:")
-        for item, text in reasoning.items():
-            lines.append(f"║   ├─ {item}: {text}")
+        lines.append("║ └─ reasoning: " + reasoning[:200] + ("..." if len(reasoning) > 200 else ""))
     
     lines.append("╚" + "═" * 78 + "╝")
     lines.append("")
@@ -356,3 +369,93 @@ def generate_sample_report() -> List[str]:
     ])
     
     return lines
+
+
+def format_bullish_analysis(data: Dict[str, Any]) -> str:
+    """格式化多方研究分析"""
+    perspective = data.get('perspective', 'bullish')
+    confidence = data.get('confidence', 0.5)
+    thesis_points = data.get('thesis_points', [])
+    reasoning = data.get('reasoning', '')
+    
+    lines = []
+    lines.append("╔" + "═" * 35 + " 🐂 多方研究分析 " + "═" * 35 + "╗")
+    lines.append(f"║ 观点: {perspective.upper()}")
+    
+    if isinstance(confidence, (int, float)):
+        conf_str = f"{confidence*100:.1f}%" if confidence <= 1 else f"{confidence:.1f}%"
+    else:
+        conf_str = str(confidence)
+    lines.append(f"║ 置信度: {conf_str}")
+    
+    lines.append("║ 论点")
+    for point in thesis_points:
+        lines.append(f"║ + {point}")
+    
+    if reasoning:
+        lines.append(f"║ {reasoning}")
+    
+    lines.append("╚" + "═" * 78 + "╝")
+    lines.append("")
+    
+    return "\n".join(lines)
+
+
+def format_bearish_analysis(data: Dict[str, Any]) -> str:
+    """格式化空方研究分析"""
+    perspective = data.get('perspective', 'bearish')
+    confidence = data.get('confidence', 0.5)
+    thesis_points = data.get('thesis_points', [])
+    reasoning = data.get('reasoning', '')
+    
+    lines = []
+    lines.append("╔" + "═" * 35 + " 🐻 空方研究分析 " + "═" * 35 + "╗")
+    lines.append(f"║ 观点: {perspective.upper()}")
+    
+    if isinstance(confidence, (int, float)):
+        conf_str = f"{confidence*100:.1f}%" if confidence <= 1 else f"{confidence:.1f}%"
+    else:
+        conf_str = str(confidence)
+    lines.append(f"║ 置信度: {conf_str}")
+    
+    lines.append("║ 论点")
+    for point in thesis_points:
+        lines.append(f"║ - {point}")
+    
+    if reasoning:
+        lines.append(f"║ {reasoning}")
+    
+    lines.append("╚" + "═" * 78 + "╝")
+    lines.append("")
+    
+    return "\n".join(lines)
+
+
+def format_debate_analysis(data: Dict[str, Any]) -> str:
+    """格式化辩论室分析"""
+    signal = data.get('signal', 'neutral')
+    confidence = data.get('confidence', 0.5)
+    debate_summary = data.get('debate_summary', [])
+    reasoning = data.get('reasoning', '')
+    
+    lines = []
+    lines.append("╔" + "═" * 35 + " 🗣️ 辩论室分析 " + "═" * 35 + "╗")
+    lines.append(f"║ 信号: {get_signal_icon(signal)} {signal}")
+    
+    if isinstance(confidence, (int, float)):
+        conf_str = f"{confidence*100:.1f}%" if confidence <= 1 else f"{confidence:.1f}%"
+    else:
+        conf_str = str(confidence)
+    lines.append(f"║ 置信度: {conf_str}")
+    
+    if debate_summary:
+        for summary_line in debate_summary:
+            lines.append(f"║ {summary_line}")
+    
+    if reasoning:
+        lines.append(f"║ {reasoning}")
+    
+    lines.append("╚" + "═" * 78 + "╝")
+    lines.append("")
+    
+    return "\n".join(lines)
