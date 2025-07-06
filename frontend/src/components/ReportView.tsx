@@ -54,25 +54,19 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
   let analysisData = null;
   let agent_results = null;
   
-  // 优先级1: 从data.result获取（API标准格式）
-  if (data.result && data.result.agent_results) {
-    analysisData = data.result;
-    agent_results = data.result.agent_results;
-  }
-  // 优先级2: 直接从data获取（直接格式）
-  else if (data.agent_results && !data.action) {
-    analysisData = data;
-    agent_results = data.agent_results;
-  }
-  // 优先级3: 处理portfolio manager的直接输出格式
-  else if (data.action && data.agent_signals && Array.isArray(data.agent_signals)) {
+  // 优先级1: 处理portfolio manager的直接输出格式 (最准确的数据)
+  if ((data.action && data.agent_signals && Array.isArray(data.agent_signals)) || 
+      (data.final_decision && data.final_decision.agent_signals && Array.isArray(data.final_decision.agent_signals))) {
     // 这是portfolio manager的直接输出格式，需要转换
     analysisData = data;
     // 从agent_signals中构建agent_results结构
     agent_results = {};
     
-    if (data.agent_signals && Array.isArray(data.agent_signals)) {
-      data.agent_signals.forEach((signal: any) => {
+    // 获取agent_signals数组
+    const agentSignals = data.agent_signals || data.final_decision?.agent_signals || [];
+    
+    if (agentSignals && Array.isArray(agentSignals)) {
+      agentSignals.forEach((signal: any) => {
         const agentName = signal.agent_name;
         if (agentName) {
           // 映射agent名称到前端期望的格式
@@ -85,7 +79,9 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
             'selected_stock_macro_analysis': 'macro_analyst',
             'market_wide_news_summary(沪深300指数)': 'macro_news',
             'ashare_policy_impact': 'policy_impact',
-            'liquidity_assessment': 'liquidity'
+            'liquidity_assessment': 'liquidity',
+            'bull_researcher': 'researcher_bull',
+            'bear_researcher': 'researcher_bear'
           };
           
           const mappedName = nameMapping[agentName] || agentName;
@@ -104,6 +100,16 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
         }
       });
     }
+  }
+  // 优先级2: 从data.result获取（API标准格式）
+  else if (data.result && data.result.agent_results) {
+    analysisData = data.result;
+    agent_results = data.result.agent_results;
+  }
+  // 优先级3: 直接从data获取（直接格式）
+  else if (data.agent_results && !data.action) {
+    analysisData = data;
+    agent_results = data.agent_results;
   }
   
   // 如果仍然没有找到有效数据，显示错误信息

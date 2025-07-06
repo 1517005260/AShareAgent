@@ -5,6 +5,7 @@
 
 import sys
 import os
+import argparse
 from datetime import datetime, timedelta
 
 # 添加项目路径
@@ -13,14 +14,23 @@ sys.path.insert(0, project_root)
 
 def main():
     """运行回测示例"""
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='运行智能回测系统')
+    parser.add_argument('--ticker', type=str, default='600519', help='股票代码')
+    parser.add_argument('--start-date', type=str, help='开始日期 (YYYY-MM-DD)')
+    parser.add_argument('--end-date', type=str, help='结束日期 (YYYY-MM-DD)')
+    parser.add_argument('--initial-capital', type=float, default=100000, help='初始资金')
+    parser.add_argument('--show-reasoning', action='store_true', help='显示详细推理')
+    args = parser.parse_args()
+    
     from src.backtesting import IntelligentBacktester
     from src.main import run_hedge_fund
     
     # 配置参数
-    ticker = "600519"  # 贵州茅台
-    start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-    end_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    initial_capital = 100000
+    ticker = args.ticker
+    start_date = args.start_date or (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    end_date = args.end_date or (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+    initial_capital = args.initial_capital
     
     # 配置细粒度agent频率
     agent_frequencies = {

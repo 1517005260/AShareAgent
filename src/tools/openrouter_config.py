@@ -68,8 +68,8 @@ else:
 @backoff.on_exception(
     backoff.expo,
     (Exception),
-    max_tries=5,
-    max_time=300,
+    max_tries=3,
+    max_time=60,  # 从300秒减少到60秒
     giveup=lambda e: "AFC is enabled" not in str(e)
 )
 def generate_content_with_retry(model, contents, config=None):

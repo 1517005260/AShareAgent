@@ -2,6 +2,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 import json
 from src.utils.logging_config import setup_logger
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as ConcurrentTimeoutError
 
 from src.agents.state import AgentState, show_agent_reasoning, show_workflow_status
 from src.tools.openrouter_config import get_chat_completion
@@ -67,6 +68,11 @@ def portfolio_management_agent(state: AgentState):
         cleaned_messages_for_processing, "risk_management_agent")
     tool_based_macro_message = get_latest_message_by_name(
         cleaned_messages_for_processing, "macro_analyst_agent")  # This is the main analysis path output
+    # Add bull and bear researcher messages
+    bull_researcher_message = get_latest_message_by_name(
+        cleaned_messages_for_processing, "researcher_bull_agent")
+    bear_researcher_message = get_latest_message_by_name(
+        cleaned_messages_for_processing, "researcher_bear_agent")
 
     # Extract content, handling potential None if message not found by get_latest_message_by_name
     technical_content = technical_message.content if technical_message else json.dumps(
@@ -81,6 +87,10 @@ def portfolio_management_agent(state: AgentState):
         {"signal": "error", "details": "Risk message missing"})
     tool_based_macro_content = tool_based_macro_message.content if tool_based_macro_message else json.dumps(
         {"signal": "error", "details": "Tool-based Macro message missing"})
+    bull_researcher_content = bull_researcher_message.content if bull_researcher_message else json.dumps(
+        {"signal": "error", "details": "Bull researcher message missing"})
+    bear_researcher_content = bear_researcher_message.content if bear_researcher_message else json.dumps(
+        {"signal": "error", "details": "Bear researcher message missing"})
 
     # Market-wide news summary from macro_news_agent (already correctly fetched from state["data"])
     market_wide_news_summary_content = state["data"].get(
@@ -137,6 +147,8 @@ def portfolio_management_agent(state: AgentState):
                 - "market_wide_news_summary(沪深300指数)" (大盘新闻摘要)
                 - "ashare_policy_impact" (A股政策影响评估)
                 - "liquidity_assessment" (流动性评估)
+                - "bull_researcher" (多方研究分析)
+                - "bear_researcher" (空方研究分析)
                 每个信号需提供bullish/bearish/neutral标记和置信度
             - "reasoning": <决策解释，包括如何权衡所有信号、宏观输入、以及是否遵循或覆盖风险管理建议。特别说明A股市场特色因素的考虑>
             - "ashare_considerations": <A股特色考虑因素，如T+1限制、政策影响、流动性等>
@@ -167,6 +179,9 @@ def portfolio_management_agent(state: AgentState):
             General Macro Analysis (from Macro Analyst Agent): {tool_based_macro_content}
             Daily Market-Wide News Summary (from Macro News Agent):
             {market_wide_news_summary_content}
+            
+            Bull Researcher Analysis: {bull_researcher_content}
+            Bear Researcher Analysis: {bear_researcher_content}
 
             当前投资组合状况:
             现金: {portfolio['cash']:.2f}
@@ -188,7 +203,21 @@ def portfolio_management_agent(state: AgentState):
         agent_name, f"Preparing LLM. User msg includes: TA, FA, Sent, Val, Risk, GeneralMacro, MarketNews.")
 
     llm_interaction_messages = [system_message, user_message]
-    llm_response_content = get_chat_completion(llm_interaction_messages)
+    
+    # 使用线程池添加超时控制
+    def call_llm():
+        return get_chat_completion(llm_interaction_messages)
+    
+    try:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(call_llm)
+            llm_response_content = future.result(timeout=90)  # 90秒超时
+    except ConcurrentTimeoutError:
+        logger.error(f"{agent_name}: LLM call timeout after 90 seconds")
+        llm_response_content = None
+    except Exception as e:
+        logger.error(f"{agent_name}: LLM call failed: {e}")
+        llm_response_content = None
 
     current_metadata = state["metadata"]
     current_metadata["current_agent_name"] = agent_name
@@ -216,10 +245,18 @@ def portfolio_management_agent(state: AgentState):
                     "signal": "neutral", "confidence": 0.0},
                 {"agent_name": "risk_management",
                     "signal": "hold", "confidence": 1.0},
-                {"agent_name": "macro_analyst_agent",
+                {"agent_name": "selected_stock_macro_analysis",
                     "signal": "neutral", "confidence": 0.0},
-                {"agent_name": "macro_news_agent",
-                    "signal": "unavailable_or_llm_error", "confidence": 0.0}
+                {"agent_name": "market_wide_news_summary(沪深300指数)",
+                    "signal": "unavailable_or_llm_error", "confidence": 0.0},
+                {"agent_name": "ashare_policy_impact",
+                    "signal": "neutral", "confidence": 0.0},
+                {"agent_name": "liquidity_assessment",
+                    "signal": "neutral", "confidence": 0.0},
+                {"agent_name": "bull_researcher",
+                    "signal": "neutral", "confidence": 0.0},
+                {"agent_name": "bear_researcher",
+                    "signal": "neutral", "confidence": 0.0}
             ],
             "reasoning": "LLM API error. Defaulting to conservative hold based on risk management."
         })
@@ -236,6 +273,51 @@ def portfolio_management_agent(state: AgentState):
     agent_decision_details_value = {}
     try:
         decision_json = json.loads(llm_response_content)
+        
+        # 后处理：为多空研究员添加详细信息
+        if "agent_signals" in decision_json:
+            # 解析多空研究员的原始内容
+            bull_researcher_data = {}
+            bear_researcher_data = {}
+            
+            # 调试：打印原始内容
+            logger.info(f"Debug: bull_researcher_content = {bull_researcher_content[:200] if bull_researcher_content else 'None'}...")
+            logger.info(f"Debug: bear_researcher_content = {bear_researcher_content[:200] if bear_researcher_content else 'None'}...")
+            
+            try:
+                bull_researcher_data = json.loads(bull_researcher_content)
+                logger.info(f"Debug: Successfully parsed bull_researcher_data with keys: {list(bull_researcher_data.keys())}")
+            except Exception as e:
+                logger.error(f"Debug: Failed to parse bull_researcher_content: {e}")
+                
+            try:
+                bear_researcher_data = json.loads(bear_researcher_content)
+                logger.info(f"Debug: Successfully parsed bear_researcher_data with keys: {list(bear_researcher_data.keys())}")
+            except Exception as e:
+                logger.error(f"Debug: Failed to parse bear_researcher_content: {e}")
+            
+            # 为agent_signals中的多空研究员添加详细信息
+            for signal in decision_json["agent_signals"]:
+                if signal.get("agent_name") == "bull_researcher" and bull_researcher_data:
+                    signal.update({
+                        "reasoning": bull_researcher_data.get("reasoning", ""),
+                        "thesis_points": bull_researcher_data.get("thesis_points", []),
+                        "perspective": bull_researcher_data.get("perspective", "bullish"),
+                        "signal_weights": bull_researcher_data.get("signal_weights", {}),
+                        "ashare_factors": bull_researcher_data.get("ashare_factors", {})
+                    })
+                elif signal.get("agent_name") == "bear_researcher" and bear_researcher_data:
+                    signal.update({
+                        "reasoning": bear_researcher_data.get("reasoning", ""),
+                        "thesis_points": bear_researcher_data.get("thesis_points", []),
+                        "perspective": bear_researcher_data.get("perspective", "bearish"),
+                        "risk_factors": bear_researcher_data.get("risk_factors", []),
+                        "ashare_risks": bear_researcher_data.get("ashare_risks", {})
+                    })
+            
+            # 更新LLM响应内容
+            llm_response_content = json.dumps(decision_json)
+        
         agent_decision_details_value = {
             "action": decision_json.get("action"),
             "quantity": decision_json.get("quantity"),

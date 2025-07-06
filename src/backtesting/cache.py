@@ -4,6 +4,7 @@
 
 import pandas as pd
 from typing import Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as ConcurrentTimeoutError
 try:
     from src.tools.api import get_price_data
 except ImportError:
@@ -28,7 +29,10 @@ class CacheManager:
         cache_key = f"{ticker}_{start_date}_{end_date}"
         
         if cache_key in self._price_data_cache:
+            self._cache_hits += 1
             return self._price_data_cache[cache_key]
+        
+        self._cache_misses += 1
         
         # 尝试获取数据，如果失败则尝试获取更大的时间范围
         df = None
@@ -36,10 +40,20 @@ class CacheManager:
         
         for attempt in range(max_retries):
             try:
-                df = get_price_data(ticker, start_date, end_date)
-                if df is not None and not df.empty:
-                    self._price_data_cache[cache_key] = df
-                    return df
+                # 使用线程池添加超时控制
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(get_price_data, ticker, start_date, end_date)
+                    try:
+                        df = future.result(timeout=30)  # 30秒超时
+                        if df is not None and not df.empty:
+                            self._price_data_cache[cache_key] = df
+                            return df
+                    except ConcurrentTimeoutError:
+                        print(f"数据获取超时 (尝试 {attempt + 1}/{max_retries})")
+                        if attempt < max_retries - 1:
+                            import time
+                            time.sleep(2 ** attempt)
+                        continue
             except Exception as e:
                 print(f"数据获取失败 (尝试 {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:

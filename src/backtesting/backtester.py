@@ -13,6 +13,8 @@ from typing import Dict, List, Optional, Any
 from collections import deque
 import warnings
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as ConcurrentTimeoutError
 
 try:
     from .models import AgentConfig, Trade, PerformanceMetrics, RiskMetrics
@@ -263,11 +265,11 @@ class IntelligentBacktester:
         # 执行需要的agents
         self.logger.info(f"执行agents: {agents_to_execute} at {current_date}")
         
-        # 根据需要执行的agents调整执行策略 - 优先使用简化workflow
-        if len(agents_to_execute) <= 3:  # 3个或以下agent时使用简化workflow
+        # 根据需要执行的agents调整执行策略 - 总是优先使用简化workflow避免LLM调用问题
+        if len(agents_to_execute) <= 5:  # 5个或以下agent时使用简化workflow（提高阈值）
             result = self._execute_partial_workflow(agents_to_execute, current_date, lookback_start, portfolio)
         else:
-            # 超过3个agents时才使用完整workflow
+            # 超过5个agents时才使用完整workflow
             result = self._execute_full_workflow(current_date, lookback_start, portfolio)
         
         # 如果结果为None或失败，返回保守的hold决策
@@ -293,17 +295,9 @@ class IntelligentBacktester:
                 if attempt > 0:
                     time.sleep(1)
                 
-                # 设置超时执行
-                import signal
-                
-                def timeout_handler(signum, frame):
-                    raise TimeoutError("Agent execution timeout")
-                
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(timeout)
-                
-                try:
-                    result = self.agent(
+                # 使用跨平台的超时机制
+                def execute_agent():
+                    return self.agent(
                         ticker=self.ticker,
                         start_date=lookback_start,
                         end_date=current_date,
@@ -311,14 +305,35 @@ class IntelligentBacktester:
                         num_of_news=self.num_of_news,
                         run_id=f"intelligent_backtest_{self.ticker}_{current_date.replace('-', '')}"
                     )
-                finally:
-                    signal.alarm(0)  # 取消超时
+                
+                # 使用线程池实现超时
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(execute_agent)
+                    try:
+                        result = future.result(timeout=timeout)
+                    except ConcurrentTimeoutError:
+                        raise TimeoutError(f"Agent execution timeout after {timeout} seconds")
 
                 # 解析结果
                 try:
                     if isinstance(result, str):
                         result = result.replace('```json\n', '').replace('\n```', '').strip()
+                        self.logger.info(f"DEBUG: Raw agent result string: {result[:200]}...")
                         parsed_result = json.loads(result)
+                        self.logger.info(f"DEBUG: Parsed agent result: {parsed_result}")
+                        
+                        # 检查关键字段
+                        action = parsed_result.get("action", "hold")
+                        quantity = parsed_result.get("quantity", 0)
+                        self.logger.info(f"DEBUG: Extracted from agent - action: {action}, quantity: {quantity}")
+                        
+                        # 如果没有具体的交易决策，试图根据信号生成决策
+                        if action == "hold" and quantity == 0 and "agent_signals" in parsed_result:
+                            action, quantity = self._generate_decision_from_signals(parsed_result["agent_signals"])
+                            self.logger.info(f"DEBUG: Generated decision from signals - action: {action}, quantity: {quantity}")
+                            parsed_result["action"] = action
+                            parsed_result["quantity"] = quantity
+                        
                         formatted_result = {
                             "decision": parsed_result,
                             "analyst_signals": {},
@@ -327,7 +342,7 @@ class IntelligentBacktester:
                         
                         if "agent_signals" in parsed_result:
                             formatted_result["analyst_signals"] = {
-                                signal["agent"]: {
+                                signal.get("agent_name", "unknown"): {
                                     "signal": signal.get("signal", "unknown"),
                                     "confidence": signal.get("confidence", 0)
                                 }
@@ -340,11 +355,26 @@ class IntelligentBacktester:
                     
                 except json.JSONDecodeError as e:
                     self.logger.warning(f"JSON解析错误: {str(e)}")
-                    return {
-                        "decision": {"action": "hold", "quantity": 0},
-                        "analyst_signals": {},
-                        "execution_type": "fallback"
-                    }
+                    self.logger.warning(f"原始响应: {result[:500]}...")
+                    # 尝试简单的文本解析
+                    if "buy" in result.lower():
+                        return {
+                            "decision": {"action": "buy", "quantity": 100},
+                            "analyst_signals": {},
+                            "execution_type": "text_parsed"
+                        }
+                    elif "sell" in result.lower():
+                        return {
+                            "decision": {"action": "sell", "quantity": 100},
+                            "analyst_signals": {},
+                            "execution_type": "text_parsed"
+                        }
+                    else:
+                        return {
+                            "decision": {"action": "hold", "quantity": 0},
+                            "analyst_signals": {},
+                            "execution_type": "fallback"
+                        }
 
             except (TimeoutError, Exception) as e:
                 self.logger.warning(f"完整workflow执行失败 (尝试 {attempt + 1}/{max_retries}): {str(e)}")
@@ -376,42 +406,62 @@ class IntelligentBacktester:
             
             current_price = df.iloc[-1]['open']
             
-            # 简化的决策逻辑
+            # 简化的决策逻辑 - 确保总是有信号生成
             signals = {}
             
-            if 'technical' in agents_to_execute:
-                # 简化技术分析 - 非常敏感的阈值
-                if len(df) >= 20:
-                    ma20 = df['close'].rolling(20).mean().iloc[-1]
-                    if current_price > ma20:  # 价格只要超过20日均线就是多头
+            # 总是执行基本的技术分析（即使不在agents_to_execute中）
+            if len(df) >= 20:
+                ma20 = df['close'].rolling(20).mean().iloc[-1]
+                if current_price > ma20:  # 价格只要超过20日均线就是多头
+                    signals['technical'] = 'bullish'
+                elif current_price < ma20 * 0.99:  # 价格低于20日均线1%
+                    signals['technical'] = 'bearish'
+                else:
+                    signals['technical'] = 'neutral'
+            elif len(df) >= 5:
+                # 如果数据不足20天，使用5日均线
+                ma5 = df['close'].rolling(5).mean().iloc[-1]
+                if current_price > ma5:  # 价格只要超过5日均线就是多头
+                    signals['technical'] = 'bullish'
+                elif current_price < ma5 * 0.995:
+                    signals['technical'] = 'bearish'
+                else:
+                    signals['technical'] = 'neutral'
+            else:
+                # 数据不足时，基于短期价格变化
+                if len(df) >= 2:
+                    price_change = (current_price / df['close'].iloc[-2] - 1)
+                    if price_change > 0.005:  # 0.5%上涨
                         signals['technical'] = 'bullish'
-                    elif current_price < ma20 * 0.99:  # 价格低于20日均线1%
+                    elif price_change < -0.005:  # 0.5%下跌
                         signals['technical'] = 'bearish'
                     else:
                         signals['technical'] = 'neutral'
-                elif len(df) >= 5:
-                    # 如果数据不足20天，使用5日均线
-                    ma5 = df['close'].rolling(5).mean().iloc[-1]
-                    if current_price > ma5:  # 价格只要超过5日均线就是多头
-                        signals['technical'] = 'bullish'
-                    elif current_price < ma5 * 0.995:
-                        signals['technical'] = 'bearish'
-                    else:
-                        signals['technical'] = 'neutral'
+                else:
+                    signals['technical'] = 'neutral'
             
-            if 'sentiment' in agents_to_execute:
-                # 简化情绪分析（基于价格动量） - 降低阈值
-                if len(df) >= 5:
-                    momentum = (current_price / df['close'].iloc[-5] - 1)
-                    if momentum > 0.01:  # 1%上涨
-                        signals['sentiment'] = 'positive'
-                    elif momentum < -0.01:  # 1%下跌
-                        signals['sentiment'] = 'negative'
-                    else:
-                        signals['sentiment'] = 'neutral'
+            # 总是执行情绪分析（基于价格动量）
+            if len(df) >= 5:
+                momentum = (current_price / df['close'].iloc[-5] - 1)
+                if momentum > 0.01:  # 1%上涨
+                    signals['sentiment'] = 'positive'
+                elif momentum < -0.01:  # 1%下跌
+                    signals['sentiment'] = 'negative'
+                else:
+                    signals['sentiment'] = 'neutral'
+            elif len(df) >= 2:
+                momentum = (current_price / df['close'].iloc[-2] - 1)
+                if momentum > 0.005:  # 0.5%上涨
+                    signals['sentiment'] = 'positive'
+                elif momentum < -0.005:  # 0.5%下跌
+                    signals['sentiment'] = 'negative'
+                else:
+                    signals['sentiment'] = 'neutral'
+            else:
+                signals['sentiment'] = 'neutral'
             
-            # 增加成交量分析
-            if 'market_data' in agents_to_execute and len(df) >= 10:
+            # 总是执行成交量分析
+            if len(df) >= 10:
                 recent_volume = df['volume'].tail(3).mean()
                 avg_volume = df['volume'].tail(10).mean()
                 if recent_volume > avg_volume * 1.2:  # 成交量放大20%
@@ -420,6 +470,8 @@ class IntelligentBacktester:
                     signals['volume'] = 'quiet'
                 else:
                     signals['volume'] = 'normal'
+            else:
+                signals['volume'] = 'normal'
             
             # 基于信号组合做出决策 - 更灵活的决策逻辑
             bullish_signals = sum(1 for s in signals.values() if s in ['bullish', 'positive', 'active'])
@@ -512,6 +564,10 @@ class IntelligentBacktester:
             action, quantity = agent_decision.get("action", "hold"), agent_decision.get("quantity", 0)
             execution_type = output.get("execution_type", "unknown")
             
+            # 添加调试日志
+            self.logger.info(f"DEBUG: {current_date_str} - Agent Decision: action={action}, quantity={quantity}, execution_type={execution_type}")
+            self.logger.info(f"DEBUG: Full output: {output}")
+            
             # 获取价格数据并执行交易
             df = self.cache_manager.get_cached_price_data(self.ticker, lookback_start, current_date_str)
             if df is None or df.empty:
@@ -540,10 +596,17 @@ class IntelligentBacktester:
             previous_price = current_price
             
             executed_quantity = self.trade_executor.execute_trade(action, quantity, current_price, current_date_str, self.portfolio)
+            
+            # 添加交易执行调试日志
+            self.logger.info(f"DEBUG: {current_date_str} - Trade Execution: requested={quantity}, executed={executed_quantity}, price={current_price}")
+            self.logger.info(f"DEBUG: Portfolio after trade: cash={self.portfolio['cash']:.2f}, stock={self.portfolio['stock']}")
 
             # 更新投资组合价值
             total_value = self.portfolio["cash"] + self.portfolio["stock"] * current_price
             self.portfolio["portfolio_value"] = total_value
+            
+            # 添加价值计算调试日志
+            self.logger.info(f"DEBUG: {current_date_str} - Portfolio Value: {total_value:.2f} (cash: {self.portfolio['cash']:.2f} + stock_value: {self.portfolio['stock'] * current_price:.2f})")
 
             # 计算日收益率
             if len(self.portfolio_values) > 0:
@@ -616,6 +679,54 @@ class IntelligentBacktester:
         self._print_optimization_stats(performance_df, perf_metrics, risk_metrics)
         
         return performance_df
+
+    def _generate_decision_from_signals(self, agent_signals):
+        """从代理信号生成交易决策"""
+        if not agent_signals:
+            return "hold", 0
+        
+        bullish_count = 0
+        bearish_count = 0
+        total_confidence = 0
+        signal_count = 0
+        
+        for signal in agent_signals:
+            signal_type = signal.get("signal", "neutral")
+            confidence = signal.get("confidence", 0)
+            
+            if signal_type == "bullish":
+                bullish_count += 1
+                total_confidence += confidence
+            elif signal_type == "bearish":
+                bearish_count += 1
+                total_confidence += confidence
+            
+            signal_count += 1
+        
+        if signal_count == 0:
+            return "hold", 0
+        
+        avg_confidence = total_confidence / signal_count
+        
+        # 根据信号强度决定交易
+        if bullish_count > bearish_count and avg_confidence > 0.6:
+            # 强烈看涨，买入
+            quantity = min(1000, int(self.portfolio["cash"] / 100))  # 保守的买入量
+            return "buy", quantity
+        elif bearish_count > bullish_count and avg_confidence > 0.6:
+            # 强烈看跌，卖出
+            quantity = min(500, self.portfolio["stock"])  # 部分卖出
+            return "sell", quantity
+        elif bullish_count > bearish_count and avg_confidence > 0.4:
+            # 温和看涨，小额买入
+            quantity = min(500, int(self.portfolio["cash"] / 200))
+            return "buy", quantity
+        elif bearish_count > bullish_count and avg_confidence > 0.4:
+            # 温和看跌，小额卖出
+            quantity = min(200, self.portfolio["stock"])
+            return "sell", quantity
+        else:
+            return "hold", 0
 
     def parse_decision_from_text(self, text: str) -> Dict[str, Any]:
         """从文本中解析决策"""

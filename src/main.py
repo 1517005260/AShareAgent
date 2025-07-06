@@ -3,6 +3,7 @@ import argparse
 import uuid  # Import uuid for run IDs
 import threading  # Import threading for background task
 import uvicorn  # Import uvicorn to run FastAPI
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as ConcurrentTimeoutError
 
 from datetime import datetime, timedelta
 # Removed START as it's implicit with set_entry_point
@@ -89,8 +90,18 @@ def run_hedge_fund(run_id: str, ticker: str, start_date: str, end_date: str, por
     try:
         from backend.utils.context_managers import workflow_run
         with workflow_run(run_id):
-            final_state = app.invoke(initial_state)
-            print(f"--- Finished Workflow Run ID: {run_id} ---")
+            # 使用线程池添加超时控制
+            def run_workflow():
+                return app.invoke(initial_state)
+            
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_workflow)
+                try:
+                    final_state = future.result(timeout=600)  # 10分钟超时
+                    print(f"--- Finished Workflow Run ID: {run_id} ---")
+                except ConcurrentTimeoutError:
+                    logger.error(f"Workflow timeout after 600 seconds for run {run_id}")
+                    raise TimeoutError("Workflow execution timeout")
 
             if HAS_SUMMARY_REPORT and show_summary:
                 store_final_state(final_state)
@@ -100,8 +111,18 @@ def run_hedge_fund(run_id: str, ticker: str, start_date: str, end_date: str, por
             if HAS_STRUCTURED_OUTPUT and show_reasoning:
                 print_structured_output(final_state)
     except ImportError:
-        final_state = app.invoke(initial_state)
-        print(f"--- Finished Workflow Run ID: {run_id} ---")
+        # 使用线程池添加超时控制
+        def run_workflow():
+            return app.invoke(initial_state)
+        
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(run_workflow)
+            try:
+                final_state = future.result(timeout=600)  # 10分钟超时
+                print(f"--- Finished Workflow Run ID: {run_id} ---")
+            except ConcurrentTimeoutError:
+                logger.error(f"Workflow timeout after 600 seconds for run {run_id}")
+                raise TimeoutError("Workflow execution timeout")
 
         if HAS_SUMMARY_REPORT and show_summary:
             store_final_state(final_state)

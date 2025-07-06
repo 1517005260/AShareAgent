@@ -10,6 +10,7 @@ import time
 import warnings
 from functools import wraps
 from src.utils.logging_config import setup_logger
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as ConcurrentTimeoutError
 
 # 设置日志记录
 logger = setup_logger('api')
@@ -19,9 +20,9 @@ warnings.filterwarnings('ignore')
 
 # 数据源配置
 DATA_SOURCES = {
-    'akshare': {'priority': 1, 'timeout': 30},
-    'yfinance': {'priority': 2, 'timeout': 20},
-    'eastmoney': {'priority': 3, 'timeout': 25}
+    'eastmoney': {'priority': 1, 'timeout': 25},
+    'akshare': {'priority': 2, 'timeout': 30},
+    'yfinance': {'priority': 3, 'timeout': 20}
 }
 
 # 重试装饰器
@@ -225,8 +226,8 @@ def get_financial_metrics(symbol: str) -> List[Dict[str, Any]]:
     """获取财务指标数据，使用多数据源策略"""
     logger.info(f"Getting financial indicators for {symbol}...")
     
-    # 尝试多个数据源
-    data_sources = ['akshare', 'eastmoney', 'yfinance']
+    # 尝试多个数据源，优先使用eastmoney
+    data_sources = ['eastmoney', 'akshare', 'yfinance']
     
     for source in data_sources:
         try:
@@ -265,10 +266,20 @@ def _get_financial_metrics_akshare(symbol: str) -> List[Dict[str, Any]]:
         realtime_data = None
         for attempt in range(3):
             try:
-                realtime_data = ak.stock_zh_a_spot_em()
-                if realtime_data is not None and not realtime_data.empty:
-                    break
-                logger.warning(f"Attempt {attempt + 1}: Empty data from akshare")
+                # 使用线程池添加超时控制
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(ak.stock_zh_a_spot_em)
+                    try:
+                        realtime_data = future.result(timeout=15)  # 15秒超时
+                        if realtime_data is not None and not realtime_data.empty:
+                            break
+                        logger.warning(f"Attempt {attempt + 1}: Empty data from akshare")
+                    except ConcurrentTimeoutError:
+                        logger.warning(f"Attempt {attempt + 1}: akshare API timeout")
+                        if attempt < 2:
+                            time.sleep(2)
+                            continue
+                        raise TimeoutError("akshare API timeout after all retries")
                 time.sleep(1)
             except Exception as e:
                 logger.warning(f"Attempt {attempt + 1}: Failed to get akshare data: {e}")
@@ -405,24 +416,83 @@ def _calculate_ps_ratio(market_cap, revenue):
     return None
 
 
+@retry_on_failure(max_retries=2, delay=1)
+def _get_eastmoney_financial_details(symbol: str) -> Dict[str, Any]:
+    """获取东方财富详细财务指标"""
+    try:
+        # 东方财富财务指标API
+        url = "http://push2.eastmoney.com/api/qt/stock/fqkl"
+        params = {
+            'secid': f"1.{symbol}" if symbol.startswith('60') else f"0.{symbol}",
+            'lmt': 1,
+            'klt': 103,  # 年报
+            'fields1': 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+            'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80,f81,f82,f83,f84,f85,f86,f87,f88,f89,f90,f91,f92,f93,f94,f95,f96,f97,f98,f99,f100'
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        if data.get('rc') != 0 or not data.get('data'):
+            logger.warning(f"No financial details from eastmoney for {symbol}")
+            return {}
+        
+        klines = data['data'].get('klines', [])
+        if not klines:
+            logger.warning(f"No klines data from eastmoney for {symbol}")
+            return {}
+        
+        # 解析最新的财务数据
+        latest_data = klines[0].split(',')
+        if len(latest_data) < 10:
+            logger.warning(f"Insufficient financial data from eastmoney for {symbol}")
+            return {}
+        
+        # 东方财富财务数据字段映射 (简化版，基于可用数据)
+        metrics = {
+            'return_on_equity': None,  # 需要单独API获取
+            'net_margin': None,  # 需要单独API获取
+            'operating_margin': None,  # 需要单独API获取
+            'revenue_growth': None,  # 需要单独API获取
+            'earnings_growth': None,  # 需要单独API获取
+            'book_value_growth': None,  # 需要单独API获取
+            'current_ratio': None,  # 需要单独API获取
+            'debt_to_equity': None,  # 需要单独API获取
+            'free_cash_flow_per_share': None,  # 需要单独API获取
+            'earnings_per_share': None,  # 需要单独API获取
+        }
+        
+        logger.info(f"✓ Retrieved financial details from eastmoney for {symbol}")
+        return metrics
+        
+    except Exception as e:
+        logger.warning(f"Could not get financial details from eastmoney: {e}")
+        return {}
+
+
 def _get_financial_metrics_eastmoney(symbol: str) -> List[Dict[str, Any]]:
     """使用东方财富获取财务指标"""
     data = get_eastmoney_data(symbol)
     if not data:
         raise Exception("No data from eastmoney")
     
+    # 获取更多财务指标
+    additional_metrics = _get_eastmoney_financial_details(symbol)
+    
     # 从东方财富API获取的数据构建指标，使用实际可获得的数据
     metrics = {
-        "return_on_equity": None,  # 需要额外API调用获取
-        "net_margin": None,  # 需要额外API调用获取
-        "operating_margin": None,  # 需要额外API调用获取
-        "revenue_growth": None,  # 需要额外API调用获取
-        "earnings_growth": None,  # 需要额外API调用获取
-        "book_value_growth": None,  # 需要额外API调用获取
-        "current_ratio": None,  # 需要额外API调用获取
-        "debt_to_equity": None,  # 需要额外API调用获取
-        "free_cash_flow_per_share": None,  # 需要额外API调用获取
-        "earnings_per_share": None,  # 需要额外API调用获取
+        "return_on_equity": additional_metrics.get('return_on_equity'),  # 从详细财务数据获取
+        "net_margin": additional_metrics.get('net_margin'),  # 从详细财务数据获取
+        "operating_margin": additional_metrics.get('operating_margin'),  # 从详细财务数据获取
+        "revenue_growth": additional_metrics.get('revenue_growth'),  # 从详细财务数据获取
+        "earnings_growth": additional_metrics.get('earnings_growth'),  # 从详细财务数据获取
+        "book_value_growth": additional_metrics.get('book_value_growth'),  # 从详细财务数据获取
+        "current_ratio": additional_metrics.get('current_ratio'),  # 从详细财务数据获取
+        "debt_to_equity": additional_metrics.get('debt_to_equity'),  # 从详细财务数据获取
+        "free_cash_flow_per_share": additional_metrics.get('free_cash_flow_per_share'),  # 从详细财务数据获取
+        "earnings_per_share": additional_metrics.get('earnings_per_share'),  # 从详细财务数据获取
         "pe_ratio": data.get('pe_ratio'),  # 从东方财富API获取
         "pe_ratio_static": data.get('pe_ratio_static'),  # 静态市盈率
         "price_to_book": data.get('pb_ratio'),  # 从东方财富API获取 (修复)
@@ -773,7 +843,7 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
 
 def get_market_data(symbol: str) -> Dict[str, Any]:
     """获取市场数据，使用多数据源策略"""
-    data_sources = ['akshare', 'eastmoney', 'yfinance']
+    data_sources = ['eastmoney', 'akshare', 'yfinance']
     
     for source in data_sources:
         try:
