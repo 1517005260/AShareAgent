@@ -20,6 +20,7 @@ import HistoryDashboard from './components/HistoryDashboard';
 import LoginForm from './components/LoginForm';
 import BacktestForm from './components/BacktestForm';
 import BacktestStatus from './components/BacktestStatus';
+import BacktestResult from './components/BacktestResult';
 import UserProfile from './components/UserProfile';
 import PortfolioManagement from './components/PortfolioManagement';
 import SystemMonitor from './components/SystemMonitor';
@@ -37,6 +38,7 @@ function App() {
   const [selectedMenu, setSelectedMenu] = useState<MenuKey>('dashboard');
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [currentBacktestId, setCurrentBacktestId] = useState<string | null>(null);
+  const [backtestResult, setBacktestResult] = useState<any>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -69,6 +71,12 @@ function App() {
 
   const handleBacktestStart = (runId: string) => {
     setCurrentBacktestId(runId);
+    setBacktestResult(null); // 清除之前的结果
+  };
+
+  const handleBacktestComplete = (result: any) => {
+    console.log('Backtest completed:', result);
+    setBacktestResult(result);
   };
 
   const handleLoginSuccess = (userInfo: UserInfo) => {
@@ -119,8 +127,11 @@ function App() {
                 {currentBacktestId && (
                   <BacktestStatus
                     runId={currentBacktestId}
-                    onComplete={(result) => console.log('Backtest completed:', result)}
+                    onComplete={handleBacktestComplete}
                   />
+                )}
+                {backtestResult && (
+                  <BacktestResult result={backtestResult} />
                 )}
               </>
             )}

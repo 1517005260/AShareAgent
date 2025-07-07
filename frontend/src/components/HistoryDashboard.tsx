@@ -189,11 +189,10 @@ const HistoryDashboard: React.FC = () => {
     try {
       const response = await ApiService.getBacktestResult(taskId);
       if (response.success && response.data && response.data.result) {
-        const plotPath = response.data.result.plot_path;
-        if (plotPath) {
-          // 假设后端在8000端口，plots目录可通过 /plots 路径访问
-          const filename = plotPath.split('/').pop(); // 获取文件名
-          const imageUrl = `http://localhost:8000/plots/${filename}`;
+        const plotUrl = response.data.result.plot_url;
+        if (plotUrl) {
+          // 使用后端提供的plot_url
+          const imageUrl = `http://localhost:8000${plotUrl}`;
           setChartImageUrl(imageUrl);
           setChartModalVisible(true);
         } else {

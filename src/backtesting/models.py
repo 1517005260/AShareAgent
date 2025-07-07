@@ -28,6 +28,7 @@ class Trade:
     
     def to_dict(self):
         """转换为字典格式"""
+        total_amount = self.executed_quantity * self.price
         return {
             "date": self.date,
             "action": self.action,
@@ -35,7 +36,8 @@ class Trade:
             "price": self.price,
             "executed_quantity": self.executed_quantity,
             "commission": self.commission,
-            "slippage": self.slippage
+            "slippage": self.slippage,
+            "total_amount": total_amount
         }
 
 

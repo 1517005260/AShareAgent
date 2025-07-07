@@ -200,6 +200,9 @@ export interface BacktestResult {
       values: number[];
     };
     benchmark_comparison?: Record<string, any>;
+    plot_path?: string;
+    plot_url?: string;
+    run_id?: string;
   };
 }
 

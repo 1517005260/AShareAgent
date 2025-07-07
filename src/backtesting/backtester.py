@@ -643,7 +643,7 @@ class IntelligentBacktester:
                   f"{current_price:>8.2f} {self.portfolio['cash']:>12,.0f} {self.portfolio['stock']:>8} "
                   f"{total_value:>12,.0f} {execution_type:<15}")
 
-    def analyze_performance(self, save_plots: bool = True) -> Optional[pd.DataFrame]:
+    def analyze_performance(self, save_plots: bool = True) -> Optional[str]:
         """分析性能，包含智能执行统计"""
         if not self.portfolio_values:
             print("无性能数据可分析")
@@ -658,6 +658,7 @@ class IntelligentBacktester:
         performance_df = pd.DataFrame(self.portfolio_values).set_index("Date")
         
         # 生成图表
+        plot_path = None
         if save_plots:
             plot_path = self.visualizer.create_performance_plot(
                 self.portfolio_values,
@@ -678,7 +679,7 @@ class IntelligentBacktester:
         # 打印智能优化统计
         self._print_optimization_stats(performance_df, perf_metrics, risk_metrics)
         
-        return performance_df
+        return plot_path
 
     def _generate_decision_from_signals(self, agent_signals):
         """从代理信号生成交易决策"""

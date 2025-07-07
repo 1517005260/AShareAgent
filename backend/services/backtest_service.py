@@ -7,6 +7,7 @@
 import uuid
 import json
 import logging
+import os
 from datetime import datetime, UTC
 from typing import Dict, Any, Optional
 from concurrent.futures import Future
@@ -86,20 +87,29 @@ def execute_backtest_with_user(request: BacktestRequest, run_id: str, user_id: i
         logger.info("开始分析回测性能")
         plot_path = backtester.analyze_performance(save_plots=True)
         
+        # 计算性能和风险指标
+        try:
+            perf_metrics = backtester.calculate_performance_metrics()
+            risk_metrics = backtester.calculate_risk_metrics()
+        except Exception as e:
+            logger.warning(f"计算指标失败: {e}")
+            perf_metrics = None
+            risk_metrics = None
+        
         # 获取回测结果
         result_data = {
             "performance_metrics": {
-                "total_return": backtester.total_return if hasattr(backtester, 'total_return') else None,
-                "annualized_return": backtester.annualized_return if hasattr(backtester, 'annualized_return') else None,
-                "sharpe_ratio": backtester.sharpe_ratio if hasattr(backtester, 'sharpe_ratio') else None,
-                "max_drawdown": backtester.max_drawdown if hasattr(backtester, 'max_drawdown') else None,
-                "volatility": backtester.volatility if hasattr(backtester, 'volatility') else None,
+                "total_return": perf_metrics.total_return if perf_metrics else None,
+                "annualized_return": perf_metrics.annualized_return if perf_metrics else None,
+                "sharpe_ratio": perf_metrics.sharpe_ratio if perf_metrics else None,
+                "max_drawdown": perf_metrics.max_drawdown if perf_metrics else None,
+                "volatility": perf_metrics.volatility if perf_metrics else None,
             },
             "risk_metrics": {
-                "var_95": backtester.var_95 if hasattr(backtester, 'var_95') else None,
-                "expected_shortfall": backtester.expected_shortfall if hasattr(backtester, 'expected_shortfall') else None,
-                "beta": backtester.beta if hasattr(backtester, 'beta') else None,
-                "alpha": backtester.alpha if hasattr(backtester, 'alpha') else None,
+                "var_95": risk_metrics.value_at_risk if risk_metrics else None,
+                "expected_shortfall": risk_metrics.expected_shortfall if risk_metrics else None,
+                "beta": risk_metrics.beta if risk_metrics else None,
+                "alpha": risk_metrics.alpha if risk_metrics else None,
             },
             "trades": [trade.to_dict() for trade in backtester.trade_executor.trades] if hasattr(backtester, 'trade_executor') and hasattr(backtester.trade_executor, 'trades') else [],
             "portfolio_values": {
@@ -108,6 +118,7 @@ def execute_backtest_with_user(request: BacktestRequest, run_id: str, user_id: i
             },
             "benchmark_comparison": backtester.benchmark_results if hasattr(backtester, 'benchmark_results') else None,
             "plot_path": plot_path if plot_path else None,
+            "plot_url": f"/plots/{os.path.basename(plot_path)}" if plot_path else None,
             "run_id": run_id
         }
         
