@@ -11,7 +11,7 @@ from backend.middleware.dual_logging_middleware import setup_dual_logging_middle
 
 from backend.routers import logs, runs
 # 导入新增的路由器
-from backend.routers import agents, workflow, analysis, api_runs, auth, portfolio, config, stats, monitor, backtest
+from backend.routers import agents, workflow, analysis, api_runs, auth, portfolio, config, stats, monitor, backtest, stock
 
 # 添加项目根目录到Python路径，确保可以导入初始化脚本
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -98,6 +98,7 @@ app.include_router(workflow.router)
 app.include_router(analysis.router)
 app.include_router(backtest.router)
 app.include_router(api_runs.router)
+app.include_router(stock.router, prefix="/api/stock", tags=["股票价格"])
 
 # 根端点API导航
 

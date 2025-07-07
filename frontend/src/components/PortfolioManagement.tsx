@@ -46,11 +46,11 @@ interface Holding {
   id: number;
   ticker: string;
   quantity: number;
-  average_price: number;
+  avg_cost: number;
   current_price: number;
   market_value: number;
   unrealized_pnl: number;
-  unrealized_pnl_percent: number;
+  unrealized_pnl_rate: number;
 }
 
 interface Transaction {
@@ -60,7 +60,7 @@ interface Transaction {
   quantity: number;
   price: number;
   total_amount: number;
-  created_at: string;
+  transaction_date: string;
 }
 
 const PortfolioManagement: React.FC = () => {
@@ -82,6 +82,26 @@ const PortfolioManagement: React.FC = () => {
   const [transactionForm] = Form.useForm();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'holdings' | 'transactions'>('overview');
+  const [fetchingPrice, setFetchingPrice] = useState(false);
+
+  const handleGetStockPrice = async (ticker: string) => {
+    if (!ticker) return;
+    
+    try {
+      setFetchingPrice(true);
+      const response = await ApiService.getStockPrice(ticker);
+      if (response.success && response.data?.current_price) {
+        transactionForm.setFieldsValue({ price: response.data.current_price });
+        message.success(`获取到${ticker}的当前价格: ¥${response.data.current_price}`);
+      } else {
+        message.warning('无法获取股票价格，请手动输入');
+      }
+    } catch (err: any) {
+      message.error('获取股票价格失败');
+    } finally {
+      setFetchingPrice(false);
+    }
+  };
 
   useEffect(() => {
     loadPortfolios();
@@ -129,6 +149,28 @@ const PortfolioManagement: React.FC = () => {
       }
     } catch (err: any) {
       setError(err.response?.data?.message || '获取组合详情失败');
+    }
+  };
+
+  const handleRefreshPrices = async () => {
+    if (!selectedPortfolio) return;
+
+    try {
+      setLoading(true);
+      message.info('正在刷新股票价格...');
+      
+      const response = await ApiService.updatePortfolioHoldings(selectedPortfolio.id);
+      if (response.success) {
+        message.success('股票价格刷新成功');
+        await loadPortfolioDetails();
+        await loadPortfolios();
+      } else {
+        message.error(response.message || '刷新价格失败');
+      }
+    } catch (err: any) {
+      message.error(err.response?.data?.message || '刷新价格失败');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -198,9 +240,25 @@ const PortfolioManagement: React.FC = () => {
 
     try {
       setLoading(true);
+      
+      // 获取股票实时价格（如果没有手动输入价格）
+      let finalPrice = values.price;
+      if (!finalPrice || finalPrice === 0) {
+        try {
+          const priceResponse = await ApiService.getStockPrice(values.ticker);
+          if (priceResponse.success && priceResponse.data?.current_price) {
+            finalPrice = priceResponse.data.current_price;
+            message.info(`自动获取实时价格: ¥${finalPrice}`);
+          }
+        } catch (priceErr) {
+          console.warn('获取实时价格失败，使用手动输入价格');
+        }
+      }
+      
       const response = await ApiService.addTransaction(selectedPortfolio.id, {
         ...values,
-        total_amount: values.quantity * values.price
+        price: finalPrice,
+        total_amount: values.quantity * finalPrice
       });
 
       if (response.success) {
@@ -209,6 +267,13 @@ const PortfolioManagement: React.FC = () => {
         transactionForm.resetFields();
         await loadPortfolioDetails();
         await loadPortfolios();
+        // 更新持仓价格
+        try {
+          await ApiService.updatePortfolioHoldings(selectedPortfolio.id);
+          await loadPortfolioDetails(); // 重新加载显示更新后的数据
+        } catch (updateErr) {
+          console.warn('更新持仓价格失败');
+        }
       } else {
         message.error(response.message || '添加交易记录失败');
       }
@@ -220,6 +285,9 @@ const PortfolioManagement: React.FC = () => {
   };
 
   const formatCurrency = (value: number) => {
+    if (isNaN(value) || value === null || value === undefined) {
+      return '¥0.00';
+    }
     return new Intl.NumberFormat('zh-CN', {
       style: 'currency',
       currency: 'CNY'
@@ -227,6 +295,9 @@ const PortfolioManagement: React.FC = () => {
   };
 
   const formatPercent = (value: number) => {
+    if (isNaN(value) || value === null || value === undefined) {
+      return '0.00%';
+    }
     return `${(value * 100).toFixed(2)}%`;
   };
 
@@ -247,8 +318,8 @@ const PortfolioManagement: React.FC = () => {
     },
     {
       title: '平均成本',
-      dataIndex: 'average_price',
-      key: 'average_price',
+      dataIndex: 'avg_cost',
+      key: 'avg_cost',
       render: (value: number) => formatCurrency(value),
     },
     {
@@ -271,8 +342,8 @@ const PortfolioManagement: React.FC = () => {
           <Tag color={getReturnColor(record.unrealized_pnl)}>
             {formatCurrency(record.unrealized_pnl)}
           </Tag>
-          <Tag color={getReturnColor(record.unrealized_pnl_percent)}>
-            {formatPercent(record.unrealized_pnl_percent)}
+          <Tag color={getReturnColor(record.unrealized_pnl_rate)}>
+            {formatPercent(record.unrealized_pnl_rate / 100)}
           </Tag>
         </Space>
       ),
@@ -282,9 +353,20 @@ const PortfolioManagement: React.FC = () => {
   const transactionsColumns = [
     {
       title: '交易时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      render: (date: string) => new Date(date).toLocaleDateString('zh-CN'),
+      dataIndex: 'transaction_date',
+      key: 'transaction_date',
+      render: (date: string) => {
+        if (!date) {
+          // 如果没有日期，显示当前日期
+          return new Date().toLocaleDateString('zh-CN');
+        }
+        const parsedDate = new Date(date);
+        if (isNaN(parsedDate.getTime())) {
+          // 如果日期无效，使用当前日期
+          return new Date().toLocaleDateString('zh-CN');
+        }
+        return parsedDate.toLocaleDateString('zh-CN');
+      },
     },
     {
       title: '股票代码',
@@ -480,13 +562,21 @@ const PortfolioManagement: React.FC = () => {
                   onChange={(key) => setActiveTab(key as any)}
                   tabBarExtraContent={
                     activeTab === 'holdings' ? (
-                      <Button
-                        type="primary"
-                        icon={<TransactionOutlined />}
-                        onClick={() => setTransactionModalVisible(true)}
-                      >
-                        添加交易
-                      </Button>
+                      <Space>
+                        <Button
+                          icon={<TransactionOutlined />}
+                          onClick={() => setTransactionModalVisible(true)}
+                        >
+                          添加交易
+                        </Button>
+                        <Button
+                          type="primary"
+                          loading={loading}
+                          onClick={handleRefreshPrices}
+                        >
+                          刷新价格
+                        </Button>
+                      </Space>
                     ) : null
                   }
                   items={[
@@ -496,10 +586,18 @@ const PortfolioManagement: React.FC = () => {
                       children: (
                         <Descriptions bordered column={2}>
                           <Descriptions.Item label="创建时间">
-                            {new Date(selectedPortfolio.created_at).toLocaleDateString('zh-CN')}
+                            {selectedPortfolio.created_at ? 
+                              (isNaN(new Date(selectedPortfolio.created_at).getTime()) ? 
+                                '无效日期' : 
+                                new Date(selectedPortfolio.created_at).toLocaleDateString('zh-CN')) : 
+                              '无效日期'}
                           </Descriptions.Item>
                           <Descriptions.Item label="最后更新">
-                            {new Date(selectedPortfolio.updated_at).toLocaleDateString('zh-CN')}
+                            {selectedPortfolio.updated_at ? 
+                              (isNaN(new Date(selectedPortfolio.updated_at).getTime()) ? 
+                                '无效日期' : 
+                                new Date(selectedPortfolio.updated_at).toLocaleDateString('zh-CN')) : 
+                              '无效日期'}
                           </Descriptions.Item>
                           <Descriptions.Item label="风险等级">
                             <Tag color={selectedPortfolio.risk_level === 'high' ? 'red' : selectedPortfolio.risk_level === 'medium' ? 'orange' : 'green'}>
@@ -714,7 +812,13 @@ const PortfolioManagement: React.FC = () => {
             label="股票代码"
             rules={[{ required: true, message: '请输入股票代码' }]}
           >
-            <Input placeholder="例如: 000001" maxLength={6} />
+            <Input.Search
+              placeholder="例如: 000001"
+              maxLength={6}
+              enterButton="获取价格"
+              loading={fetchingPrice}
+              onSearch={handleGetStockPrice}
+            />
           </Form.Item>
 
           <Form.Item
@@ -740,8 +844,38 @@ const PortfolioManagement: React.FC = () => {
             name="price"
             label="价格"
             rules={[{ required: true, message: '请输入价格' }]}
+            extra="可以先输入股票代码点击'获取价格'自动填入当前价格"
           >
-            <InputNumber min={0.01} step={0.01} style={{ width: '100%' }} />
+            <InputNumber 
+              min={0.01} 
+              step={0.01} 
+              style={{ width: '100%' }} 
+              placeholder="0.00"
+              formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={value => value!.replace(/¥\s?|(,*)/g, '') as any}
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="总金额"
+            dependencies={['quantity', 'price']}
+          >
+            <Form.Item noStyle shouldUpdate>
+              {({ getFieldValue }) => {
+                const quantity = getFieldValue('quantity') || 0;
+                const price = getFieldValue('price') || 0;
+                const total = quantity * price;
+                return (
+                  <InputNumber 
+                    value={total}
+                    disabled
+                    style={{ width: '100%' }}
+                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={value => value!.replace(/¥\s?|(,*)/g, '') as any}
+                  />
+                );
+              }}
+            </Form.Item>
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>

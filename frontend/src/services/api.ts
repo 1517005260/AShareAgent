@@ -574,6 +574,17 @@ export class ApiService {
     const response = await api.get('/api/config/system/info');
     return response.data;
   }
+
+  // 股票实时价格API
+  static async getStockPrice(ticker: string): Promise<ApiResponse<any>> {
+    const response = await api.get(`/api/stock/price/${ticker}`);
+    return response.data;
+  }
+
+  static async updatePortfolioHoldings(portfolioId: number): Promise<ApiResponse<any>> {
+    const response = await api.post(`/api/portfolios/${portfolioId}/update-prices`);
+    return response.data;
+  }
 }
 
 export default ApiService;

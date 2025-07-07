@@ -3,6 +3,14 @@
 """
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+import sys
+import os
+
+# 添加项目根目录到路径
+current_dir = os.path.dirname(__file__)
+project_root = os.path.abspath(os.path.join(current_dir, '../../'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from backend.models.api_models import ApiResponse
 from backend.models.auth_models import UserInDB
@@ -13,6 +21,7 @@ from backend.models.portfolio_models import (
 from backend.services.auth_service import get_current_active_user, require_permission
 from backend.dependencies import get_database_manager
 from src.database.models import DatabaseManager
+from src.tools.api import get_eastmoney_data, get_market_data
 import logging
 
 logger = logging.getLogger("portfolio_router")
@@ -383,4 +392,120 @@ async def get_user_portfolio_stats(
             success=False,
             message=f"获取投资组合统计失败: {str(e)}",
             data={}
+        )
+
+
+@router.post("/{portfolio_id}/update-prices", response_model=ApiResponse[Dict[str, Any]])
+async def update_portfolio_prices(
+    portfolio_id: int,
+    current_user: UserInDB = Depends(require_permission("portfolio:update")),
+    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+):
+    """
+    更新投资组合中所有股票的实时价格
+    """
+    try:
+        # 验证用户拥有此投资组合
+        portfolio = portfolio_service.get_portfolio(current_user.id, portfolio_id)
+        if not portfolio:
+            return ApiResponse(
+                success=False,
+                message="投资组合不存在或无访问权限",
+                data=None
+            )
+        
+        # 获取持仓列表
+        holdings = portfolio_service.get_portfolio_holdings(current_user.id, portfolio_id)
+        
+        if not holdings:
+            return ApiResponse(
+                success=True,
+                message="投资组合暂无持仓，无需更新价格",
+                data={"updated_count": 0}
+            )
+        
+        updated_count = 0
+        failed_tickers = []
+        
+        for holding in holdings:
+            ticker = holding.ticker
+            current_price = None
+            
+            try:
+                # 先尝试东方财富API
+                try:
+                    price_data = get_eastmoney_data(ticker)
+                    if price_data and 'current_price' in price_data and price_data['current_price'] is not None:
+                        current_price = float(price_data['current_price'])
+                        logger.info(f"东方财富API获取 {ticker} 价格成功: {current_price}")
+                    else:
+                        logger.warning(f"东方财富API返回无效数据: {price_data}")
+                        raise Exception("东方财富API返回无效数据")
+                except Exception as east_ex:
+                    logger.warning(f"东方财富API失败: {east_ex}")
+                    # 如果失败，尝试市场数据API
+                    try:
+                        price_data = get_market_data(ticker)
+                        if price_data and 'current_price' in price_data and price_data['current_price'] is not None:
+                            current_price = float(price_data['current_price'])
+                            logger.info(f"市场数据API获取 {ticker} 价格成功: {current_price}")
+                        else:
+                            logger.warning(f"市场数据API返回无效数据: {price_data}")
+                            raise Exception("市场数据API返回无效数据")
+                    except Exception as market_ex:
+                        logger.error(f"市场数据API也失败: {market_ex}")
+                        # 如果所有外部API都失败，跳过这个股票
+                        failed_tickers.append(ticker)
+                        continue
+                
+                # 验证价格有效性
+                if current_price is None or current_price <= 0:
+                    logger.error(f"获取到无效价格: {current_price}")
+                    failed_tickers.append(ticker)
+                    continue
+                
+                # 更新持仓价格
+                logger.info(f"尝试更新持仓价格: user_id={current_user.id}, portfolio_id={portfolio_id}, ticker={ticker}, price={current_price}")
+                success = portfolio_service.update_holding_price(
+                    current_user.id, portfolio_id, ticker, current_price
+                )
+                
+                if success:
+                    updated_count += 1
+                    logger.info(f"成功更新 {ticker} 价格: {current_price}")
+                else:
+                    logger.warning(f"Service层更新持仓价格失败: {ticker}")
+                    failed_tickers.append(ticker)
+                    
+            except Exception as e:
+                logger.error(f"更新股票 {ticker} 价格过程中发生异常: {str(e)}")
+                failed_tickers.append(ticker)
+        
+        # 如果有更新，重新计算投资组合价值
+        if updated_count > 0:
+            try:
+                portfolio_service.recalculate_portfolio_value(current_user.id, portfolio_id)
+            except Exception as e:
+                logger.warning(f"重新计算投资组合价值失败: {str(e)}")
+        
+        message = f"成功更新了 {updated_count} 个股票的价格"
+        if failed_tickers:
+            message += f"，失败的股票: {', '.join(failed_tickers)}"
+        
+        return ApiResponse(
+            success=True,
+            message=message,
+            data={
+                "updated_count": updated_count,
+                "failed_tickers": failed_tickers,
+                "total_holdings": len(holdings)
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"更新投资组合价格失败: {e}")
+        return ApiResponse(
+            success=False,
+            message=f"更新投资组合价格失败: {str(e)}",
+            data=None
         )

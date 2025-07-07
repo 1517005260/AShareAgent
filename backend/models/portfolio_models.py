@@ -397,6 +397,7 @@ class PortfolioService:
         
         query = """
         SELECT h.*, 
+               h.avg_cost as average_price,
                COALESCE(h.current_price, h.avg_cost) as current_price,
                (h.quantity * COALESCE(h.current_price, h.avg_cost)) as market_value,
                ((COALESCE(h.current_price, h.avg_cost) - h.avg_cost) * h.quantity) as unrealized_pnl,
@@ -410,6 +411,14 @@ class PortfolioService:
         holdings = []
         for row in result:
             holding_data = dict(row)
+            # 确保数值字段不为None
+            holding_data['avg_cost'] = holding_data.get('avg_cost') or 0.0
+            holding_data['average_price'] = holding_data.get('average_price') or holding_data['avg_cost']
+            holding_data['current_price'] = holding_data.get('current_price') or holding_data['avg_cost']
+            holding_data['market_value'] = holding_data.get('market_value') or 0.0
+            holding_data['unrealized_pnl'] = holding_data.get('unrealized_pnl') or 0.0
+            holding_data['unrealized_pnl_rate'] = holding_data.get('unrealized_pnl_rate') or 0.0
+            
             holdings.append(HoldingResponse(**holding_data))
         
         return holdings
@@ -423,7 +432,7 @@ class PortfolioService:
             return []
         
         query = """
-        SELECT * FROM user_transactions 
+        SELECT *, transaction_date FROM user_transactions 
         WHERE portfolio_id = ?
         ORDER BY transaction_date DESC
         LIMIT ? OFFSET ?
@@ -432,7 +441,14 @@ class PortfolioService:
         
         transactions = []
         for row in result:
-            transactions.append(TransactionResponse(**dict(row)))
+            transaction_data = dict(row)
+            # 确保transaction_date字段正确设置
+            if 'transaction_date' in transaction_data and transaction_data['transaction_date']:
+                transaction_data['transaction_date'] = transaction_data['transaction_date']
+            else:
+                transaction_data['transaction_date'] = datetime.now()
+            
+            transactions.append(TransactionResponse(**transaction_data))
         
         return transactions
     
@@ -460,3 +476,83 @@ class PortfolioService:
             cash_balance=portfolio.cash_balance or 0,
             total_value=total_market_value + (portfolio.cash_balance or 0)
         )
+    
+    def update_holding_price(self, user_id: int, portfolio_id: int, ticker: str, current_price: float) -> bool:
+        """更新特定股票的持仓价格"""
+        try:
+            # 验证组合所有权
+            portfolio = self.get_portfolio_by_id(user_id, portfolio_id)
+            if not portfolio:
+                return False
+            
+            # 更新持仓价格和时间戳
+            query = """
+            UPDATE user_holdings 
+            SET current_price = ?, last_updated = CURRENT_TIMESTAMP
+            WHERE portfolio_id = ? AND ticker = ?
+            """
+            
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query, (current_price, portfolio_id, ticker))
+                rowcount = cursor.rowcount
+                conn.commit()
+                
+                # 检查是否有行被更新
+                if rowcount > 0:
+                    return True
+                else:
+                    # 如果没有找到持仓记录，说明可能是新股票，不更新
+                    return False
+                
+        except Exception as e:
+            print(f"更新持仓价格失败: {e}")
+            return False
+    
+    def recalculate_portfolio_value(self, user_id: int, portfolio_id: int) -> bool:
+        """重新计算投资组合的总价值"""
+        try:
+            # 验证组合所有权
+            portfolio = self.get_portfolio_by_id(user_id, portfolio_id)
+            if not portfolio:
+                return False
+            
+            # 计算所有持仓的市值总和
+            holdings_value_query = """
+            SELECT COALESCE(SUM(quantity * COALESCE(current_price, avg_cost)), 0) as total_holdings_value
+            FROM user_holdings 
+            WHERE portfolio_id = ?
+            """
+            
+            result = self.db.execute_query(holdings_value_query, (portfolio_id,))
+            total_holdings_value = 0
+            
+            if result:
+                total_holdings_value = result[0]['total_holdings_value'] or 0
+            
+            # 获取现金余额
+            cash_balance = portfolio.cash_balance or 0
+            
+            # 计算总价值
+            total_current_value = total_holdings_value + cash_balance
+            
+            # 更新投资组合的当前价值
+            update_query = """
+            UPDATE user_portfolios 
+            SET current_value = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND user_id = ?
+            """
+            
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(update_query, (total_current_value, portfolio_id, user_id))
+                conn.commit()
+                return cursor.rowcount > 0
+            
+        except Exception as e:
+            print(f"重新计算投资组合价值失败: {e}")
+            return False
+    
+    def get_portfolio(self, user_id: int, portfolio_id: int) -> Optional[PortfolioResponse]:
+        """获取投资组合（别名方法，用于兼容）"""
+        return self.get_portfolio_by_id(user_id, portfolio_id)
