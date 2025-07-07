@@ -28,8 +28,8 @@ const AnalysisStatus: React.FC<AnalysisStatusProps> = ({ runId, onComplete }) =>
             // Extract the actual result from the nested structure
             const actualResult = resultResponse.data.result || resultResponse.data;
             // Add ticker and task info from status response if not present in result
-            if (!actualResult.ticker && response.data.ticker) {
-              actualResult.ticker = response.data.ticker;
+            if (!actualResult.ticker && (response.data as any).ticker) {
+              actualResult.ticker = (response.data as any).ticker;
             }
             if (!actualResult.task_id && resultResponse.data.task_id) {
               actualResult.task_id = resultResponse.data.task_id;

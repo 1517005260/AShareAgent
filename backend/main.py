@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, List
 import sys
@@ -73,6 +74,14 @@ setup_dual_logging_middleware(app)
 
 # 添加API统计中间件
 add_stats_middleware(app)
+
+# 添加静态文件服务 - 用于服务生成的图表
+plots_dir = os.path.join(project_root, "plots")
+if os.path.exists(plots_dir):
+    app.mount("/plots", StaticFiles(directory=plots_dir), name="plots")
+    logger.info(f"静态文件服务已配置: /plots -> {plots_dir}")
+else:
+    logger.warning(f"Plots目录不存在，跳过静态文件配置: {plots_dir}")
 
 # 包含现有路由器
 app.include_router(logs.router)

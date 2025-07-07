@@ -226,7 +226,7 @@ def init_agents():
             }
         },
         {
-            "name": "fundamentals_analyst",
+            "name": "fundamentals",
             "display_name": "基本面分析师",
             "description": "负责公司财务数据分析，包括盈利能力、财务健康状况等基本面分析",
             "agent_type": "analysis",
@@ -238,7 +238,7 @@ def init_agents():
             }
         },
         {
-            "name": "sentiment_analyst",
+            "name": "sentiment",
             "display_name": "情感分析师",
             "description": "负责市场情绪和新闻舆情分析，提供投资者情绪指标",
             "agent_type": "sentiment",
@@ -250,7 +250,7 @@ def init_agents():
             }
         },
         {
-            "name": "valuation_analyst",
+            "name": "valuation",
             "display_name": "估值分析师",
             "description": "负责股票内在价值评估，包括DCF模型、相对估值等",
             "agent_type": "analysis",
@@ -262,7 +262,7 @@ def init_agents():
             }
         },
         {
-            "name": "risk_manager",
+            "name": "risk_management",
             "display_name": "风险管理师",
             "description": "负责投资风险评估和控制，包括VaR、波动率等风险指标分析",
             "agent_type": "risk",
@@ -286,7 +286,7 @@ def init_agents():
             }
         },
         {
-            "name": "portfolio_manager",
+            "name": "portfolio_management",
             "display_name": "投资组合管理师",
             "description": "负责整合各分析师意见，制定最终投资决策和仓位管理",
             "agent_type": "trading",
@@ -328,8 +328,8 @@ def init_agents():
             }
         },
         {
-            "name": "debate_moderator",
-            "display_name": "辩论主持人",
+            "name": "debate_room",
+            "display_name": "辩论室",
             "description": "主持多空双方辩论，综合评估不同观点，形成平衡的投资建议",
             "agent_type": "analysis",
             "status": "active",
@@ -337,6 +337,30 @@ def init_agents():
                 "debate_rounds": 3,
                 "objectivity_weight": 0.8,
                 "llm_arbitration": True
+            }
+        },
+        {
+            "name": "market_data",
+            "display_name": "市场数据分析师",
+            "description": "负责收集和处理股票市场数据，包括价格、成交量、技术指标等",
+            "agent_type": "data",
+            "status": "active",
+            "config": {
+                "data_sources": ["market", "financial", "news"],
+                "update_frequency": "real_time",
+                "data_quality_check": True
+            }
+        },
+        {
+            "name": "macro_news",
+            "display_name": "宏观新闻分析师",
+            "description": "专门分析宏观经济新闻，评估对整体市场的影响",
+            "agent_type": "news",
+            "status": "active",
+            "config": {
+                "news_categories": ["monetary_policy", "fiscal_policy", "economic_data"],
+                "analysis_scope": "macro_level",
+                "impact_assessment": True
             }
         }
     ]

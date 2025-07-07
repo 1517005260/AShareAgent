@@ -185,20 +185,20 @@ def researcher_bear_agent(state: AgentState):
 
     message = HumanMessage(
         content=json.dumps(message_content),
-        name="researcher_bear_agent",
+        name="researcher_bear",
     )
 
     if show_reasoning:
         show_agent_reasoning(message_content, "Bearish Researcher")
     
     # 保存推理信息到agent特定的键中，避免被其他agent覆盖
-    state["metadata"]["researcher_bear_agent_reasoning"] = message_content
+    state["metadata"]["researcher_bear_reasoning"] = message_content
 
     show_workflow_status("Bearish Researcher", "completed")
     
     # 确保返回结果中包含我们的数据
     result_metadata = state["metadata"].copy()
-    result_metadata["researcher_bear_agent_reasoning"] = message_content
+    result_metadata["researcher_bear_reasoning"] = message_content
     
     return {
         "messages": state["messages"] + [message],

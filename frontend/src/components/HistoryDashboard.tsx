@@ -35,7 +35,7 @@ import moment from 'moment';
 const { Option } = Select;
 const { Search } = Input;
 const { Text, Paragraph } = Typography;
-const { TabPane } = Tabs;
+// Removed unused TabPane import
 
 const HistoryDashboard: React.FC = () => {
   const [decisions, setDecisions] = useState<AgentDecision[]>([]);
@@ -47,10 +47,12 @@ const HistoryDashboard: React.FC = () => {
   const [formattedModalVisible, setFormattedModalVisible] = useState(false);
   const [analysisDetailModalVisible, setAnalysisDetailModalVisible] = useState(false);
   const [backtestDetailModalVisible, setBacktestDetailModalVisible] = useState(false);
+  const [chartModalVisible, setChartModalVisible] = useState(false);
   const [selectedDecision, setSelectedDecision] = useState<AgentDecision | null>(null);
   const [selectedAnalysis, setSelectedAnalysis] = useState<any>(null);
   const [selectedBacktest, setSelectedBacktest] = useState<any>(null);
   const [formattedText, setFormattedText] = useState<string>('');
+  const [chartImageUrl, setChartImageUrl] = useState<string>('');
   const [filters, setFilters] = useState({
     run_id: '',
     agent_name: '',
@@ -180,6 +182,29 @@ const HistoryDashboard: React.FC = () => {
     } catch (error) {
       message.error('获取回测结果失败');
       console.error('Get backtest result error:', error);
+    }
+  };
+
+  const viewBacktestChart = async (taskId: string) => {
+    try {
+      const response = await ApiService.getBacktestResult(taskId);
+      if (response.success && response.data && response.data.result) {
+        const plotPath = response.data.result.plot_path;
+        if (plotPath) {
+          // 假设后端在8000端口，plots目录可通过 /plots 路径访问
+          const filename = plotPath.split('/').pop(); // 获取文件名
+          const imageUrl = `http://localhost:8000/plots/${filename}`;
+          setChartImageUrl(imageUrl);
+          setChartModalVisible(true);
+        } else {
+          message.warning('该回测任务没有生成图表');
+        }
+      } else {
+        message.error('获取回测结果失败');
+      }
+    } catch (error) {
+      message.error('获取回测结果失败');
+      console.error('Get backtest chart error:', error);
     }
   };
 
@@ -457,10 +482,7 @@ const HistoryDashboard: React.FC = () => {
               <Button
                 type="link"
                 icon={<PictureOutlined />}
-                onClick={() => {
-                  // 查看回测图表
-                  message.info('回测图表功能开发中...');
-                }}
+                onClick={() => viewBacktestChart(record.task_id)}
                 size="small"
               >
                 查看图表
@@ -848,6 +870,38 @@ const HistoryDashboard: React.FC = () => {
         }}>
           {formattedText}
         </pre>
+      </Modal>
+
+      {/* 回测图表显示模态框 */}
+      <Modal
+        title="回测图表"
+        open={chartModalVisible}
+        onCancel={() => setChartModalVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setChartModalVisible(false)}>
+            关闭
+          </Button>
+        ]}
+        width={1000}
+        centered
+      >
+        {chartImageUrl && (
+          <div style={{ textAlign: 'center' }}>
+            <img 
+              src={chartImageUrl} 
+              alt="回测图表" 
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '70vh',
+                objectFit: 'contain'
+              }}
+              onError={(e) => {
+                message.error('图片加载失败，请检查图表是否存在');
+                console.error('Chart image load error:', e);
+              }}
+            />
+          </div>
+        )}
       </Modal>
     </>
   );

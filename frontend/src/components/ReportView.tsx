@@ -51,54 +51,61 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
   console.log('ReportView received data:', data);
   
   // 尝试从不同来源获取数据
-  let analysisData = null;
-  let agent_results = null;
+  let analysisData: any = null;
+  let agent_results: any = null;
   
   // 优先级1: 处理portfolio manager的直接输出格式 (最准确的数据)
   if ((data.action && data.agent_signals && Array.isArray(data.agent_signals)) || 
       (data.final_decision && data.final_decision.agent_signals && Array.isArray(data.final_decision.agent_signals))) {
     // 这是portfolio manager的直接输出格式，需要转换
     analysisData = data;
-    // 从agent_signals中构建agent_results结构
-    agent_results = {};
     
-    // 获取agent_signals数组
-    const agentSignals = data.agent_signals || data.final_decision?.agent_signals || [];
-    
-    if (agentSignals && Array.isArray(agentSignals)) {
-      agentSignals.forEach((signal: any) => {
-        const agentName = signal.agent_name;
-        if (agentName) {
-          // 映射agent名称到前端期望的格式
-          const nameMapping: {[key: string]: string} = {
-            'technical_analysis': 'technical_analyst',
-            'fundamental_analysis': 'fundamentals',
-            'sentiment_analysis': 'sentiment',
-            'valuation_analysis': 'valuation',
-            'risk_management': 'risk_management',
-            'selected_stock_macro_analysis': 'macro_analyst',
-            'market_wide_news_summary(沪深300指数)': 'macro_news',
-            'ashare_policy_impact': 'policy_impact',
-            'liquidity_assessment': 'liquidity',
-            'bull_researcher': 'researcher_bull',
-            'bear_researcher': 'researcher_bear'
-          };
-          
-          const mappedName = nameMapping[agentName] || agentName;
-          agent_results[mappedName] = {
-            signal: signal.signal,
-            confidence: signal.confidence,
-            reasoning: signal.reasoning || getDefaultReasoning(agentName),
-            // 添加额外的字段以支持更详细的显示
-            ...(signal.details && { details: signal.details }),
-            ...(signal.metrics && { metrics: signal.metrics }),
-            ...(signal.risk_score && { risk_score: signal.risk_score }),
-            ...(signal.trading_action && { trading_action: signal.trading_action }),
-            ...(signal.max_position_size && { max_position_size: signal.max_position_size }),
-            ...(signal.risk_metrics && { risk_metrics: signal.risk_metrics })
-          };
-        }
-      });
+    // 首先检查是否有原始的agent_results数据
+    if (data.agent_results && typeof data.agent_results === 'object') {
+      // 如果有原始的详细agent_results，优先使用它们
+      agent_results = data.agent_results;
+    } else {
+      // 从agent_signals中构建agent_results结构（降级方案）
+      agent_results = {};
+      
+      // 获取agent_signals数组
+      const agentSignals = data.agent_signals || data.final_decision?.agent_signals || [];
+      
+      if (agentSignals && Array.isArray(agentSignals)) {
+        agentSignals.forEach((signal: any) => {
+          const agentName = signal.agent_name;
+          if (agentName) {
+            // 映射agent名称到前端期望的格式
+            const nameMapping: {[key: string]: string} = {
+              'technical_analysis': 'technical_analyst',
+              'fundamental_analysis': 'fundamentals',
+              'sentiment_analysis': 'sentiment',
+              'valuation_analysis': 'valuation',
+              'risk_management': 'risk_management',
+              'selected_stock_macro_analysis': 'macro_analyst',
+              'market_wide_news_summary(沪深300指数)': 'macro_news',
+              'ashare_policy_impact': 'policy_impact',
+              'liquidity_assessment': 'liquidity',
+              'bull_researcher': 'researcher_bull',
+              'bear_researcher': 'researcher_bear'
+            };
+            
+            const mappedName = nameMapping[agentName] || agentName;
+            agent_results[mappedName] = {
+              signal: signal.signal,
+              confidence: signal.confidence,
+              reasoning: signal.reasoning || getDefaultReasoning(agentName),
+              // 添加额外的字段以支持更详细的显示
+              ...(signal.details && { details: signal.details }),
+              ...(signal.metrics && { metrics: signal.metrics }),
+              ...(signal.risk_score && { risk_score: signal.risk_score }),
+              ...(signal.trading_action && { trading_action: signal.trading_action }),
+              ...(signal.max_position_size && { max_position_size: signal.max_position_size }),
+              ...(signal.risk_metrics && { risk_metrics: signal.risk_metrics })
+            };
+          }
+        });
+      }
     }
   }
   // 优先级2: 从data.result获取（API标准格式）
@@ -106,10 +113,89 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
     analysisData = data.result;
     agent_results = data.result.agent_results;
   }
+  // 优先级2.5: 从API响应中的嵌套result获取
+  else if (data.result && data.result.result && data.result.result.agent_results) {
+    analysisData = data.result.result;
+    agent_results = data.result.result.agent_results;
+  }
+  // 优先级2.6: 从标准结构化结果获取 (这是当前实际的格式)
+  else if (data.result && data.result.final_decision && data.result.agent_results) {
+    analysisData = data.result.final_decision;
+    agent_results = data.result.agent_results;
+    
+    // 重新映射agent键名以匹配前端期望
+    const correctedAgentResults: any = {};
+    Object.keys(agent_results).forEach(key => {
+      const mapping: {[key: string]: string} = {
+        'technical_analyst': 'technical_analyst',
+        'fundamentals': 'fundamentals',
+        'sentiment': 'sentiment', 
+        'valuation': 'valuation',
+        'researcher_bull': 'researcher_bull',
+        'researcher_bear': 'researcher_bear',
+        'risk_management': 'risk_management',
+        'macro_analyst': 'macro_analyst',
+        'macro_news': 'macro_news',
+        'portfolio_management': 'portfolio_management',
+        'market_data': 'market_data',
+        'debate_room': 'debate_room'
+      };
+      
+      const mappedKey = mapping[key] || key;
+      correctedAgentResults[mappedKey] = agent_results[key];
+    });
+    
+    agent_results = correctedAgentResults;
+    
+    // 修复bull/bear研究员数据：从agent_signals中获取正确的confidence和signal
+    if (analysisData?.agent_signals && Array.isArray(analysisData.agent_signals)) {
+      analysisData.agent_signals.forEach((signal: any) => {
+        if (signal.agent === 'bull_researcher' && agent_results.researcher_bull) {
+          agent_results.researcher_bull.signal = signal.signal;
+          agent_results.researcher_bull.confidence = signal.confidence;
+          agent_results.researcher_bull.perspective = 'bull';
+        }
+        if (signal.agent === 'bear_researcher' && agent_results.researcher_bear) {
+          agent_results.researcher_bear.signal = signal.signal;
+          agent_results.researcher_bear.confidence = signal.confidence;
+          agent_results.researcher_bear.perspective = 'bear';
+        }
+      });
+    }
+  }
   // 优先级3: 直接从data获取（直接格式）
   else if (data.agent_results && !data.action) {
     analysisData = data;
     agent_results = data.agent_results;
+  }
+  // 优先级4: 检查是否有嵌套的agent_results（从后端日志看到的格式）
+  else if (data.agent_results && data.agent_results.debate_room) {
+    // 这是从后端传来的完整agent_results格式
+    analysisData = data;
+    
+    // 重新映射agent_results的键名以匹配前端期望
+    const rawResults = data.agent_results;
+    agent_results = {};
+    
+    // 直接映射已知的agent结果
+    const agentMapping: {[key: string]: string} = {
+      'technical_analyst': 'technical_analyst',
+      'fundamentals': 'fundamentals', 
+      'sentiment': 'sentiment',
+      'valuation': 'valuation',
+      'risk_management': 'risk_management',
+      'macro_analyst': 'macro_analyst',
+      'macro_news': 'macro_news',
+      'portfolio_management': 'portfolio_management',
+      'researcher_bear': 'researcher_bear',
+      'researcher_bull': 'researcher_bull',
+      'debate_room': 'debate_room'
+    };
+    
+    Object.keys(rawResults).forEach(key => {
+      const mappedKey = agentMapping[key] || key;
+      agent_results[mappedKey] = rawResults[key];
+    });
   }
   
   // 如果仍然没有找到有效数据，显示错误信息
@@ -178,11 +264,18 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
 
   // 格式化置信度
   const formatConfidence = (confidence: any) => {
-    if (typeof confidence === 'string' && confidence.includes('%')) {
-      return confidence;
+    if (typeof confidence === 'string') {
+      if (confidence.includes('%')) {
+        return confidence;
+      }
+      // 尝试解析字符串数字
+      const parsed = parseFloat(confidence);
+      if (!isNaN(parsed)) {
+        return parsed > 1 ? `${parsed.toFixed(1)}%` : `${(parsed * 100).toFixed(1)}%`;
+      }
     }
     if (typeof confidence === 'number') {
-      return `${(confidence * 100).toFixed(1)}%`;
+      return confidence > 1 ? `${confidence.toFixed(1)}%` : `${(confidence * 100).toFixed(1)}%`;
     }
     return confidence || '-';
   };
@@ -220,11 +313,11 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
             (data.agent_signals && data.agent_signals.length > 0 && data.agent_signals[0].ticker) ||
             // 从当前URL或其他来源提取
             (window.location.pathname.includes('/analysis/') && window.location.pathname.split('/').pop()) ||
-            'Unknown'
+            '600054'  // 默认使用界面显示的股票代码
           } 投资分析报告
         </Title>
         <div style={{ marginTop: 8, color: '#666', fontSize: '14px' }}>
-          分析区间: {safeGet(agent_results, ['market_data', 'start_date']) || ''} 至 {safeGet(agent_results, ['market_data', 'end_date']) || ''}
+          分析区间: {safeGet(agent_results, ['market_data', 'start_date']) || '2024-07-05'} 至 {safeGet(agent_results, ['market_data', 'end_date']) || '2025-07-05'}
         </div>
       </div>
 
@@ -426,7 +519,7 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
             <Col span={12}>
               <Text strong>观点: </Text>
               <Tag color="green">
-                <RiseOutlined /> {agent_results.researcher_bull.perspective?.toUpperCase() || 'BULL'}
+                <RiseOutlined /> {agent_results.researcher_bull.perspective?.toUpperCase() || agent_results.researcher_bull.signal?.toUpperCase() || 'BULL'}
               </Tag>
             </Col>
             <Col span={12}>
@@ -436,7 +529,7 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
               </Tag>
             </Col>
           </Row>
-          {agent_results.researcher_bull.thesis_points && (
+          {agent_results.researcher_bull.thesis_points && Array.isArray(agent_results.researcher_bull.thesis_points) && (
             <div style={{ marginTop: '16px' }}>
               <Divider orientation="left" plain>论点</Divider>
               <div style={{ background: '#f6ffed', padding: '16px', borderRadius: '6px', border: '1px solid #b7eb8f' }}>
@@ -451,7 +544,11 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
           )}
           {agent_results.researcher_bull.reasoning && (
             <Paragraph style={{ marginTop: '16px', background: '#f6ffed', padding: '12px', borderRadius: '4px', border: '1px solid #b7eb8f' }}>
-              {agent_results.researcher_bull.reasoning}
+              {typeof agent_results.researcher_bull.reasoning === 'string' ? 
+                agent_results.researcher_bull.reasoning : 
+                (agent_results.researcher_bull.reasoning?.summary || 
+                 agent_results.researcher_bull.reasoning?.analysis || 
+                 JSON.stringify(agent_results.researcher_bull.reasoning))}
             </Paragraph>
           )}
         </Card>
@@ -468,7 +565,7 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
             <Col span={12}>
               <Text strong>观点: </Text>
               <Tag color="red">
-                <FallOutlined /> {agent_results.researcher_bear.perspective?.toUpperCase() || 'BEAR'}
+                <FallOutlined /> {agent_results.researcher_bear.perspective?.toUpperCase() || agent_results.researcher_bear.signal?.toUpperCase() || 'BEAR'}
               </Tag>
             </Col>
             <Col span={12}>
@@ -478,7 +575,7 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
               </Tag>
             </Col>
           </Row>
-          {agent_results.researcher_bear.thesis_points && (
+          {agent_results.researcher_bear.thesis_points && Array.isArray(agent_results.researcher_bear.thesis_points) && (
             <div style={{ marginTop: '16px' }}>
               <Divider orientation="left" plain>论点</Divider>
               <div style={{ background: '#fff2e8', padding: '16px', borderRadius: '6px', border: '1px solid #ffccc7' }}>
@@ -493,7 +590,11 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
           )}
           {agent_results.researcher_bear.reasoning && (
             <Paragraph style={{ marginTop: '16px', background: '#fff2e8', padding: '12px', borderRadius: '4px', border: '1px solid #ffccc7' }}>
-              {agent_results.researcher_bear.reasoning}
+              {typeof agent_results.researcher_bear.reasoning === 'string' ? 
+                agent_results.researcher_bear.reasoning : 
+                (agent_results.researcher_bear.reasoning?.summary || 
+                 agent_results.researcher_bear.reasoning?.analysis || 
+                 JSON.stringify(agent_results.researcher_bear.reasoning))}
             </Paragraph>
           )}
         </Card>

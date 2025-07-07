@@ -64,27 +64,28 @@ def macro_analyst_agent(state: AgentState):
         try:
             import akshare as ak
             fresh_news_df = ak.stock_news_em(symbol=symbol)
-            if fresh_news_df is not None and not fresh_news_df.empty:
-                fresh_news_list = []
-                for _, row in fresh_news_df.head(10).iterrows():
-                    try:
-                        content = row.get("新闻内容", "") or row.get("新闻标题", "")
-                        if len(content.strip()) > 10:
-                            fresh_news_item = {
-                                "title": row.get("新闻标题", "").strip(),
-                                "content": content.strip(),
-                                "publish_time": str(row.get("发布时间", "")),
-                                "source": row.get("文章来源", "").strip(),
-                                "url": row.get("新闻链接", "").strip(),
-                                "keyword": symbol
-                            }
-                            fresh_news_list.append(fresh_news_item)
-                    except:
-                        continue
-                
-                if fresh_news_list:
-                    logger.info(f"通过akshare强制刷新获取到 {len(fresh_news_list)} 条新闻")
-                    recent_news = fresh_news_list
+            if fresh_news_df is not None:
+                if not fresh_news_df.empty:
+                    fresh_news_list = []
+                    for _, row in fresh_news_df.head(10).iterrows():
+                        try:
+                            content = row.get("新闻内容", "") or row.get("新闻标题", "")
+                            if len(content.strip()) > 10:
+                                fresh_news_item = {
+                                    "title": row.get("新闻标题", "").strip(),
+                                    "content": content.strip(),
+                                    "publish_time": str(row.get("发布时间", "")),
+                                    "source": row.get("文章来源", "").strip(),
+                                    "url": row.get("新闻链接", "").strip(),
+                                    "keyword": symbol
+                                }
+                                fresh_news_list.append(fresh_news_item)
+                        except:
+                            continue
+                    
+                    if fresh_news_list:
+                        logger.info(f"通过akshare强制刷新获取到 {len(fresh_news_list)} 条新闻")
+                        recent_news = fresh_news_list
         except Exception as e:
             logger.error(f"强制刷新新闻失败: {e}")
     

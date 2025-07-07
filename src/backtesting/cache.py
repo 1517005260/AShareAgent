@@ -45,9 +45,10 @@ class CacheManager:
                     future = executor.submit(get_price_data, ticker, start_date, end_date)
                     try:
                         df = future.result(timeout=30)  # 30秒超时
-                        if df is not None and not df.empty:
-                            self._price_data_cache[cache_key] = df
-                            return df
+                        if df is not None:
+                            if not df.empty:
+                                self._price_data_cache[cache_key] = df
+                                return df
                     except ConcurrentTimeoutError:
                         print(f"数据获取超时 (尝试 {attempt + 1}/{max_retries})")
                         if attempt < max_retries - 1:
@@ -70,18 +71,19 @@ class CacheManager:
         """从缓存中获取回退数据"""
         # 寻找相同ticker的其他时间范围数据
         for key, cached_df in self._price_data_cache.items():
-            if key.startswith(ticker) and cached_df is not None and not cached_df.empty:
-                # 尝试过滤出所需日期范围的数据
-                try:
-                    cached_df['date'] = pd.to_datetime(cached_df['date'])
-                    filtered_df = cached_df[
-                        (cached_df['date'] >= start_date) & 
-                        (cached_df['date'] <= end_date)
-                    ]
-                    if not filtered_df.empty:
-                        return filtered_df
-                except:
-                    continue
+            if key.startswith(ticker) and cached_df is not None:
+                if not cached_df.empty:
+                    # 尝试过滤出所需日期范围的数据
+                    try:
+                        cached_df['date'] = pd.to_datetime(cached_df['date'])
+                        filtered_df = cached_df[
+                            (cached_df['date'] >= start_date) & 
+                            (cached_df['date'] <= end_date)
+                        ]
+                        if not filtered_df.empty:
+                            return filtered_df
+                    except:
+                        continue
         
         return None
     

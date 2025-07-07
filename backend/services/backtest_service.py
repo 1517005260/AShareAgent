@@ -103,8 +103,8 @@ def execute_backtest_with_user(request: BacktestRequest, run_id: str, user_id: i
             },
             "trades": [trade.to_dict() for trade in backtester.trade_executor.trades] if hasattr(backtester, 'trade_executor') and hasattr(backtester.trade_executor, 'trades') else [],
             "portfolio_values": {
-                "dates": [str(date) for date in backtester.portfolio_values.index] if hasattr(backtester, 'portfolio_values') else [],
-                "values": backtester.portfolio_values.tolist() if hasattr(backtester, 'portfolio_values') else []
+                "dates": [str(pv["Date"]) for pv in backtester.portfolio_values] if hasattr(backtester, 'portfolio_values') and backtester.portfolio_values else [],
+                "values": [pv["Portfolio Value"] for pv in backtester.portfolio_values] if hasattr(backtester, 'portfolio_values') and backtester.portfolio_values else []
             },
             "benchmark_comparison": backtester.benchmark_results if hasattr(backtester, 'benchmark_results') else None,
             "plot_path": plot_path if plot_path else None,

@@ -271,8 +271,9 @@ def _get_financial_metrics_akshare(symbol: str) -> List[Dict[str, Any]]:
                     future = executor.submit(ak.stock_zh_a_spot_em)
                     try:
                         realtime_data = future.result(timeout=15)  # 15秒超时
-                        if realtime_data is not None and not realtime_data.empty:
-                            break
+                        if realtime_data is not None:
+                            if not realtime_data.empty:
+                                break
                         logger.warning(f"Attempt {attempt + 1}: Empty data from akshare")
                     except ConcurrentTimeoutError:
                         logger.warning(f"Attempt {attempt + 1}: akshare API timeout")
@@ -310,8 +311,9 @@ def _get_financial_metrics_akshare(symbol: str) -> List[Dict[str, Any]]:
         try:
             financial_data = ak.stock_financial_analysis_indicator(
                 symbol=symbol, start_year=str(current_year - year_range))
-            if financial_data is not None and not financial_data.empty:
-                break
+            if financial_data is not None:
+                if not financial_data.empty:
+                    break
         except Exception as e:
             logger.warning(f"Failed to get financial data for year range {year_range}: {e}")
             continue
@@ -1063,10 +1065,12 @@ def get_price_history(symbol: str, start_date: str = None, end_date: str = None,
 
         # 计算成交量动量（相对于20日平均成交量的变化）
         df["volume_ma20"] = df["volume"].rolling(window=20).mean()
-        # 修复：避免除零错误
+        # 修复：避免除零错误和DataFrame布尔值错误
+        volume_ma20_safe = df["volume_ma20"].fillna(1.0)
+        volume_safe = df["volume"].fillna(0.0)
         df["volume_momentum"] = np.where(
-            df["volume_ma20"] > 0,
-            df["volume"] / df["volume_ma20"],
+            volume_ma20_safe > 0,
+            volume_safe / volume_ma20_safe,
             1.0  # 默认值：无变化
         )
 
@@ -1081,18 +1085,28 @@ def get_price_history(symbol: str, start_date: str = None, end_date: str = None,
         vol_min = volatility_120d.rolling(window=120).min()
         vol_max = volatility_120d.rolling(window=120).max()
         vol_range = vol_max - vol_min
-        # 修复：改善波动率制度计算，避免系统性返回0
+        # 修复：改善波动率制度计算，避免系统性返回0和DataFrame布尔值错误
+        vol_range_safe = vol_range.fillna(1e-6)
+        vol_min_safe = vol_min.fillna(0.0)
+        hist_vol_safe = df["historical_volatility"].fillna(0.0)
         df["volatility_regime"] = np.where(
-            vol_range > 1e-6,  # 使用更小的阈值
-            (df["historical_volatility"] - vol_min) / vol_range,
+            vol_range_safe > 1e-6,  # 使用更小的阈值
+            (hist_vol_safe - vol_min_safe) / vol_range_safe,
             0.5  # 当范围为0时返回中性值而非0
         )
 
         # 3. 波动率Z分数
         vol_mean = df["historical_volatility"].rolling(window=120).mean()
         vol_std = df["historical_volatility"].rolling(window=120).std()
-        df["volatility_z_score"] = (
-            df["historical_volatility"] - vol_mean) / vol_std
+        # 修复：避免除零错误和DataFrame布尔值错误
+        vol_mean_safe = vol_mean.fillna(0.0)
+        vol_std_safe = vol_std.fillna(1.0)
+        hist_vol_safe = df["historical_volatility"].fillna(0.0)
+        df["volatility_z_score"] = np.where(
+            vol_std_safe > 1e-6,
+            (hist_vol_safe - vol_mean_safe) / vol_std_safe,
+            0.0  # 默认值
+        )
 
         # 4. ATR比率
         tr = pd.DataFrame()
@@ -1101,7 +1115,14 @@ def get_price_history(symbol: str, start_date: str = None, end_date: str = None,
         tr["l-pc"] = abs(df["low"] - df["close"].shift(1))
         tr["tr"] = tr[["h-l", "h-pc", "l-pc"]].max(axis=1)
         df["atr"] = tr["tr"].rolling(window=14).mean()
-        df["atr_ratio"] = df["atr"] / df["close"]
+        # 修复：避免除零错误和DataFrame布尔值错误
+        atr_safe = df["atr"].fillna(0.0)
+        close_safe = df["close"].fillna(1.0)
+        df["atr_ratio"] = np.where(
+            close_safe > 0,
+            atr_safe / close_safe,
+            0.0  # 默认值
+        )
 
         # 计算统计套利指标
         # 1. 赫斯特指数 (使用过去120天的数据)
@@ -1210,11 +1231,12 @@ def get_price_history(symbol: str, start_date: str = None, end_date: str = None,
         logger.info("Trying alternative data source (yfinance)...")
         try:
             df = get_stock_data_yfinance(symbol, start_date, end_date)
-            if df is not None and not df.empty:
-                # 为yfinance数据添加技术指标
-                df = _add_technical_indicators(df)
-                logger.info(f"Successfully fetched price history from yfinance ({len(df)} records)")
-                return df
+            if df is not None:
+                if not df.empty:
+                    # 为yfinance数据添加技术指标
+                    df = _add_technical_indicators(df)
+                    logger.info(f"Successfully fetched price history from yfinance ({len(df)} records)")
+                    return df
         except Exception as e2:
             logger.error(f"Yfinance fallback also failed: {e2}")
         
@@ -1349,8 +1371,15 @@ def _add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
         # 简化版波动率指标
         df["volatility_regime"] = 1.0
         df["volatility_z_score"] = 0.0
-        df["atr"] = (df["high"] - df["low"]).rolling(window=14).mean() if 'high' in df.columns and 'low' in df.columns else 0.0
-        df["atr_ratio"] = df["atr"] / df["close"] if 'atr' in df.columns else 0.0
+        if 'high' in df.columns and 'low' in df.columns:
+            df["atr"] = (df["high"] - df["low"]).rolling(window=14).mean()
+        else:
+            df["atr"] = 0.0
+        
+        if 'atr' in df.columns:
+            df["atr_ratio"] = df["atr"] / df["close"]
+        else:
+            df["atr_ratio"] = 0.0
         
         # 统计指标
         df["hurst_exponent"] = 0.5  # 默认随机游走

@@ -27,7 +27,10 @@
       "Bash(poetry lock:*)",
       "Bash(pkill:*)",
       "Bash(npm run build:*)",
-      "mcp__ide__executeCode"
+      "mcp__ide__executeCode",
+      "Bash(npm run:*)",
+      "Bash(npm start)",
+      "Bash(timeout:*)"
     ],
     "deny": []
   }

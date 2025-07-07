@@ -84,7 +84,7 @@ class PerformanceVisualizer:
         ax2.plot(performance_df.index, performance_df["Cumulative Return"], 
                 label="Portfolio", linewidth=2, color='green')
         
-        if benchmark_values and len(benchmark_values) == len(performance_df):
+        if benchmark_values and len(benchmark_values) == performance_df.shape[0]:
             benchmark_returns = [(val/benchmark_values[0] - 1)*100 for val in benchmark_values]
             ax2.plot(performance_df.index, benchmark_returns, 
                     label="Benchmark", linewidth=2, color='orange', alpha=0.7)

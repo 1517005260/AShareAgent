@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Card, InputNumber, Switch, DatePicker, message } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { ApiService, type AnalysisRequest } from '../services/api';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 
 interface AnalysisFormProps {
   onAnalysisStart: (runId: string) => void;

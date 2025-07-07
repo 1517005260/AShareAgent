@@ -135,9 +135,10 @@ class BenchmarkCalculator:
             for stock in stock_list:
                 try:
                     df = get_price_data(stock, start_date, end_date)
-                    if df is not None and not df.empty:
-                        df['daily_return'] = df['close'].pct_change()
-                        returns_data.append(df['daily_return'].fillna(0))
+                    if df is not None:
+                        if not df.empty:
+                            df['daily_return'] = df['close'].pct_change()
+                            returns_data.append(df['daily_return'].fillna(0))
                 except:
                     continue
             
