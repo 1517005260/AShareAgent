@@ -25,16 +25,16 @@ def debate_room_agent(state: AgentState):
             continue
         if not hasattr(msg, 'name') or msg.name is None:
             continue
-        if isinstance(msg.name, str) and msg.name.startswith("researcher_") and msg.name.endswith("_agent"):
+        if isinstance(msg.name, str) and msg.name.startswith("researcher_"):
             researcher_messages[msg.name] = msg
             logger.debug(f"收集到研究员信息: {msg.name}")
 
     # 确保至少有看多和看空两个研究员
-    if "researcher_bull_agent" not in researcher_messages or "researcher_bear_agent" not in researcher_messages:
+    if "researcher_bull" not in researcher_messages or "researcher_bear" not in researcher_messages:
         logger.error(
-            "缺少必要的研究员数据: researcher_bull_agent 或 researcher_bear_agent")
+            "缺少必要的研究员数据: researcher_bull 或 researcher_bear")
         raise ValueError(
-            "Missing required researcher_bull_agent or researcher_bear_agent messages")
+            "Missing required researcher_bull or researcher_bear messages")
 
     # 处理研究员数据
     researcher_data = {}
@@ -57,13 +57,13 @@ def debate_room_agent(state: AgentState):
         researcher_data[name] = data
 
     # 获取看多和看空研究员数据（为了兼容原有逻辑）
-    if "researcher_bull_agent" not in researcher_data or "researcher_bear_agent" not in researcher_data:
+    if "researcher_bull" not in researcher_data or "researcher_bear" not in researcher_data:
         logger.error("无法解析必要的研究员数据")
         raise ValueError(
-            "Could not parse required researcher_bull_agent or researcher_bear_agent messages")
+            "Could not parse required researcher_bull or researcher_bear messages")
 
-    bull_thesis = researcher_data["researcher_bull_agent"]
-    bear_thesis = researcher_data["researcher_bear_agent"]
+    bull_thesis = researcher_data["researcher_bull"]
+    bear_thesis = researcher_data["researcher_bear"]
     logger.info(
         f"已获取看多观点(置信度: {bull_thesis.get('confidence', 0)})和看空观点(置信度: {bear_thesis.get('confidence', 0)})")
 

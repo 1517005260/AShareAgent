@@ -97,11 +97,14 @@ def run_hedge_fund(run_id: str, ticker: str, start_date: str, end_date: str, por
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(run_workflow)
                 try:
-                    final_state = future.result(timeout=600)  # 10分钟超时
+                    print(f"DEBUG: Starting workflow execution with NO timeout")
+                    final_state = future.result()  # 无超时限制
                     print(f"--- Finished Workflow Run ID: {run_id} ---")
-                except ConcurrentTimeoutError:
-                    logger.error(f"Workflow timeout after 600 seconds for run {run_id}")
-                    raise TimeoutError("Workflow execution timeout")
+                    print(f"DEBUG: HAS_STRUCTURED_OUTPUT={HAS_STRUCTURED_OUTPUT}, show_reasoning={show_reasoning}")
+                except Exception as e:
+                    logger.error(f"Workflow execution error for run {run_id}: {str(e)}")
+                    print(f"DEBUG: Workflow failed with error: {str(e)}")
+                    raise
 
             if HAS_SUMMARY_REPORT and show_summary:
                 store_final_state(final_state)
@@ -109,7 +112,9 @@ def run_hedge_fund(run_id: str, ticker: str, start_date: str, end_date: str, por
                 print_summary_report(enhanced_state)
 
             if HAS_STRUCTURED_OUTPUT and show_reasoning:
+                print("DEBUG: About to call print_structured_output")
                 print_structured_output(final_state)
+                print("DEBUG: print_structured_output completed")
     except ImportError:
         # 使用线程池添加超时控制
         def run_workflow():

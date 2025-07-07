@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import json
 import numpy as np
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 import time
 import warnings
 from functools import wraps
@@ -18,11 +20,29 @@ logger = setup_logger('api')
 # 抑制警告信息
 warnings.filterwarnings('ignore')
 
-# 数据源配置
+# 创建会话对象，支持连接池和重试策略
+def create_session_with_retries():
+    """创建带有重试策略的会话对象"""
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=20)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+# 全局会话对象
+session = create_session_with_retries()
+
+# 数据源配置 - 增加超时时间和重试次数
 DATA_SOURCES = {
-    'eastmoney': {'priority': 1, 'timeout': 25},
-    'akshare': {'priority': 2, 'timeout': 30},
-    'yfinance': {'priority': 3, 'timeout': 20}
+    'eastmoney': {'priority': 1, 'timeout': 45, 'retries': 3},
+    'akshare': {'priority': 2, 'timeout': 60, 'retries': 2},
+    'yfinance': {'priority': 3, 'timeout': 30, 'retries': 2}
 }
 
 # 重试装饰器
@@ -71,7 +91,7 @@ def safe_float(value, default=None):
 
 
 def convert_percentage(value: Union[float, str, None]) -> Optional[float]:
-    """将百分比值转换为小数，增强版本"""
+    """将百分比值转换为小数，修复版本"""
     try:
         if value is None or (isinstance(value, str) and value.strip() == '') or pd.isna(value):
             return None
@@ -92,12 +112,13 @@ def convert_percentage(value: Union[float, str, None]) -> Optional[float]:
         # 如果原始值有百分号，直接除以100
         if has_percent_sign:
             return float_val / 100.0
-        # 如果值看起来已经是小数形式（绝对值小于等于1），直接返回
-        elif abs(float_val) <= 1:
-            return float_val
-        else:
-            # 大于1的数字视为百分比，需要除以100
+        # 对于从财务数据源获取的数据，通常已经是百分比格式(例如：15.5表示15.5%)
+        # 需要除以100转换为小数形式(0.155)
+        elif abs(float_val) > 5.0:  # 大于5%的值通常是百分比格式
             return float_val / 100.0
+        else:
+            # 小值可能已经是小数格式，直接返回
+            return float_val
     except:
         return None
 
@@ -190,7 +211,7 @@ def get_eastmoney_data(symbol: str, raw_response: bool = False) -> Optional[Dict
             'fields': 'f43,f57,f58,f162,f173,f170,f46,f60,f44,f45,f47,f48,f49,f50,f51,f52,f114,f115,f116,f117,f167,f168'
         }
         
-        response = requests.get(url, params=params, timeout=10)
+        response = session.get(url, params=params, timeout=DATA_SOURCES['eastmoney']['timeout'])
         response.raise_for_status()
         
         data = response.json()
@@ -242,8 +263,23 @@ def get_financial_metrics(symbol: str) -> List[Dict[str, Any]]:
                 
             # 验证数据质量
             if result and result != [{}] and any(v is not None and v != 0 for v in result[0].values() if isinstance(v, (int, float))):
-                logger.info(f"✓ Successfully fetched financial metrics from {source}")
-                return result
+                # 检查关键财务指标的数据质量
+                data = result[0]
+                key_indicators = ['pe_ratio', 'price_to_book', 'price_to_sales', 'return_on_equity', 'net_margin']
+                valid_indicators = 0
+                
+                for indicator in key_indicators:
+                    value = data.get(indicator, None)
+                    if value is not None and value != 0:
+                        valid_indicators += 1
+                
+                # 至少需要有3个关键指标有效
+                if valid_indicators >= 3:
+                    logger.info(f"✓ Successfully fetched financial metrics from {source} ({valid_indicators}/{len(key_indicators)} key indicators valid)")
+                    return result
+                else:
+                    logger.warning(f"Insufficient key indicators from {source} ({valid_indicators}/{len(key_indicators)} valid), trying next source")
+                    continue
             else:
                 logger.warning(f"Poor data quality from {source}, trying next source")
                 
@@ -432,7 +468,7 @@ def _get_eastmoney_financial_details(symbol: str) -> Dict[str, Any]:
             'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65,f66,f67,f68,f69,f70,f71,f72,f73,f74,f75,f76,f77,f78,f79,f80,f81,f82,f83,f84,f85,f86,f87,f88,f89,f90,f91,f92,f93,f94,f95,f96,f97,f98,f99,f100'
         }
         
-        response = requests.get(url, params=params, timeout=10)
+        response = session.get(url, params=params, timeout=DATA_SOURCES['eastmoney']['timeout'])
         response.raise_for_status()
         
         data = response.json()
@@ -726,16 +762,22 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
         indicators = financial_indicators[0]
         for key in ['return_on_equity', 'net_margin', 'operating_margin', 'current_ratio', 
                    'debt_to_equity', 'revenue_growth', 'earnings_growth', 'book_value_growth',
-                   'pe_ratio', 'price_to_book', 'price_to_sales', 'earnings_per_share',
-                   'free_cash_flow_per_share']:
+                   'earnings_per_share', 'free_cash_flow_per_share']:
             if key in indicators and indicators[key] is not None:
                 metrics[key] = indicators[key]
     
-    # 从市场数据获取估值比率 (第二优先级)
+    # 从市场数据获取估值比率 (优先级高于财务指标中的估值比率)
     if market_data:
         for key in ['pe_ratio', 'price_to_book', 'price_to_sales', 'market_cap']:
-            if key in market_data and market_data[key] is not None:
+            if key in market_data and market_data[key] is not None and market_data[key] != 0:
                 metrics[key] = market_data[key]
+    
+    # 补充从财务指标获取的估值比率 (仅当市场数据没有时)
+    if financial_indicators and len(financial_indicators) > 0:
+        indicators = financial_indicators[0]
+        for key in ['pe_ratio', 'price_to_book', 'price_to_sales']:
+            if key not in metrics and key in indicators and indicators[key] is not None and indicators[key] != 0:
+                metrics[key] = indicators[key]
     
     # 从财务报表计算缺失的指标 (第三优先级 - 最重要的补充)
     if financial_statements and len(financial_statements) >= 1:
@@ -749,8 +791,8 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
                 # 如果财务报表有净资产数据，用它来计算ROE
                 stockholders_equity = safe_float(latest.get('stockholders_equity', 0))
                 if net_income and stockholders_equity and stockholders_equity > 0:
-                    metrics['return_on_equity'] = (net_income / stockholders_equity) * 100
-                    logger.info(f"Calculated ROE from statements: {metrics['return_on_equity']:.2f}%")
+                    metrics['return_on_equity'] = net_income / stockholders_equity
+                    logger.info(f"Calculated ROE from statements: {metrics['return_on_equity']:.2%}")
             except Exception as e:
                 logger.warning(f"Could not calculate ROE from statements: {e}")
         
@@ -760,8 +802,8 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
                 net_income = safe_float(latest.get('net_income', 0))
                 operating_revenue = safe_float(latest.get('operating_revenue', 0))
                 if net_income and operating_revenue and operating_revenue > 0:
-                    metrics['net_margin'] = (net_income / operating_revenue) * 100
-                    logger.info(f"Calculated Net Margin from statements: {metrics['net_margin']:.2f}%")
+                    metrics['net_margin'] = net_income / operating_revenue
+                    logger.info(f"Calculated Net Margin from statements: {metrics['net_margin']:.2%}")
             except Exception as e:
                 logger.warning(f"Could not calculate Net Margin from statements: {e}")
         
@@ -771,8 +813,8 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
                 operating_profit = safe_float(latest.get('operating_profit', 0))
                 operating_revenue = safe_float(latest.get('operating_revenue', 0))
                 if operating_profit and operating_revenue and operating_revenue > 0:
-                    metrics['operating_margin'] = (operating_profit / operating_revenue) * 100
-                    logger.info(f"Calculated Operating Margin from statements: {metrics['operating_margin']:.2f}%")
+                    metrics['operating_margin'] = operating_profit / operating_revenue
+                    logger.info(f"Calculated Operating Margin from statements: {metrics['operating_margin']:.2%}")
             except Exception as e:
                 logger.warning(f"Could not calculate Operating Margin from statements: {e}")
         
@@ -786,8 +828,8 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
                     current_revenue = safe_float(latest.get('operating_revenue', 0))
                     previous_revenue = safe_float(previous.get('operating_revenue', 0))
                     if current_revenue and previous_revenue and previous_revenue > 0:
-                        metrics['revenue_growth'] = ((current_revenue - previous_revenue) / previous_revenue) * 100
-                        logger.info(f"Calculated Revenue Growth from statements: {metrics['revenue_growth']:.2f}%")
+                        metrics['revenue_growth'] = (current_revenue - previous_revenue) / previous_revenue
+                        logger.info(f"Calculated Revenue Growth from statements: {metrics['revenue_growth']:.2%}")
                 except Exception as e:
                     logger.warning(f"Could not calculate Revenue Growth from statements: {e}")
             
@@ -797,8 +839,8 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
                     current_earnings = safe_float(latest.get('net_income', 0))
                     previous_earnings = safe_float(previous.get('net_income', 0))
                     if current_earnings and previous_earnings and previous_earnings > 0:
-                        metrics['earnings_growth'] = ((current_earnings - previous_earnings) / previous_earnings) * 100
-                        logger.info(f"Calculated Earnings Growth from statements: {metrics['earnings_growth']:.2f}%")
+                        metrics['earnings_growth'] = (current_earnings - previous_earnings) / previous_earnings
+                        logger.info(f"Calculated Earnings Growth from statements: {metrics['earnings_growth']:.2%}")
                 except Exception as e:
                     logger.warning(f"Could not calculate Earnings Growth from statements: {e}")
         
@@ -823,6 +865,22 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
                     logger.info(f"Calculated Debt-to-Equity from statements: {metrics['debt_to_equity']:.2f}")
             except Exception as e:
                 logger.warning(f"Could not calculate Debt-to-Equity from statements: {e}")
+        
+        # 计算 EPS: 净利润 / 流通股本 (如果有市场数据中的股本信息)
+        if 'earnings_per_share' not in metrics or metrics['earnings_per_share'] is None:
+            try:
+                net_income = safe_float(latest.get('net_income', 0))
+                # 尝试从市场数据推算股本数量
+                if market_data and 'current_price' in market_data and 'market_cap' in market_data:
+                    current_price = market_data['current_price']
+                    market_cap = market_data['market_cap']
+                    if current_price and market_cap and current_price > 0:
+                        shares_outstanding = market_cap / current_price
+                        if net_income and shares_outstanding > 0:
+                            metrics['earnings_per_share'] = net_income / shares_outstanding
+                            logger.info(f"Calculated EPS from statements: {metrics['earnings_per_share']:.2f}")
+            except Exception as e:
+                logger.warning(f"Could not calculate EPS from statements: {e}")
     
     # 填充缺失的指标为None而不是0，避免误导性的0值
     standard_metrics = [
@@ -835,6 +893,23 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
     for metric in standard_metrics:
         if metric not in metrics:
             metrics[metric] = None
+    
+    # 尝试计算缺失的PE比率 (如果有股价和每股收益)
+    if 'pe_ratio' not in metrics or metrics['pe_ratio'] is None:
+        try:
+            # 从市场数据获取当前股价
+            current_price = None
+            if market_data and 'current_price' in market_data:
+                current_price = market_data['current_price']
+            
+            # 获取每股收益
+            earnings_per_share = metrics.get('earnings_per_share')
+            
+            if current_price and earnings_per_share and earnings_per_share > 0:
+                metrics['pe_ratio'] = current_price / earnings_per_share
+                logger.info(f"Calculated P/E ratio: {metrics['pe_ratio']:.2f} (Price: {current_price}, EPS: {earnings_per_share})")
+        except Exception as e:
+            logger.warning(f"Could not calculate P/E ratio: {e}")
     
     # 记录成功计算的指标数量
     non_null_metrics = sum(1 for v in metrics.values() if v is not None)
@@ -905,6 +980,10 @@ def _get_market_data_eastmoney(symbol: str) -> Dict[str, Any]:
         "market_cap": data.get('market_cap'),
         "volume": data.get('volume'),
         "average_volume": data.get('volume'),
+        "current_price": data.get('current_price'),
+        "pe_ratio": data.get('pe_ratio'),
+        "price_to_book": data.get('pb_ratio'),
+        "price_to_sales": data.get('ps_ratio'),
         "fifty_two_week_high": None,
         "fifty_two_week_low": None
     }
@@ -1320,7 +1399,7 @@ def _handle_nan_values(df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             nan_ratio = df[col].isna().sum() / len(df)
             # 修复：降低阈值，更积极地处理NaN值
-            if nan_ratio > 0.3:  # 如果30%以上都是NaN，使用默认值
+            if nan_ratio > 0.1:  # 如果10%以上都是NaN，使用默认值
                 if 'momentum' in col:
                     df[col] = df[col].fillna(0.0)
                 elif 'volatility' in col or col in ['atr', 'atr_ratio']:

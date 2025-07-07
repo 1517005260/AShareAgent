@@ -30,7 +30,10 @@
       "mcp__ide__executeCode",
       "Bash(npm run:*)",
       "Bash(npm start)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(npm install)",
+      "Bash(poetry --version)",
+      "Bash(kill:*)"
     ],
     "deny": []
   }

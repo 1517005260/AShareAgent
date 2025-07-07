@@ -94,7 +94,12 @@ def risk_management_agent(state: AgentState):
 
     # 3. Position Size Limits
     # Consider total portfolio value, not just cash
-    current_stock_value = portfolio['stock'] * prices_df['close'].iloc[-1]
+    if prices_df.empty or len(prices_df) == 0:
+        # 如果没有价格数据，假设股票价值为0
+        current_stock_value = 0
+        logger.warning("No price data available for risk assessment, assuming stock value = 0")
+    else:
+        current_stock_value = portfolio['stock'] * prices_df['close'].iloc[-1]
     total_portfolio_value = portfolio['cash'] + current_stock_value
 
     # Start with 25% max position of total portfolio
@@ -120,10 +125,20 @@ def risk_management_agent(state: AgentState):
     stress_test_results = {}
     current_position_value = current_stock_value
 
+    # 检查是否有持仓
+    has_position = current_position_value > 0
+
     for scenario, decline in stress_test_scenarios.items():
-        potential_loss = current_position_value * decline
-        portfolio_impact = potential_loss / (portfolio['cash'] + current_position_value) if (
-            portfolio['cash'] + current_position_value) != 0 else math.nan
+        if has_position:
+            potential_loss = current_position_value * decline
+            portfolio_impact = potential_loss / (portfolio['cash'] + current_position_value) if (
+                portfolio['cash'] + current_position_value) != 0 else math.nan
+        else:
+            # 如果没有持仓，显示基于最大建议仓位的潜在风险
+            potential_position_value = max_position_size * state["data"]["financial_metrics"][0].get("current_price", 0)
+            potential_loss = potential_position_value * decline
+            portfolio_impact = potential_loss / portfolio['cash'] if portfolio['cash'] > 0 else math.nan
+            
         stress_test_results[scenario] = {
             "potential_loss": potential_loss,
             "portfolio_impact": portfolio_impact

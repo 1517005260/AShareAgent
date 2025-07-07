@@ -29,12 +29,32 @@ def technical_analyst_agent(state: AgentState):
     4. Volatility Analysis
     5. Statistical Arbitrage Signals
     """
-    logger.info("\n--- DEBUG: technical_analyst_agent START ---")
     show_workflow_status("Technical Analyst")
     show_reasoning = state["metadata"]["show_reasoning"]
     data = state["data"]
     prices = data["prices"]
     prices_df = prices_to_df(prices)
+
+    # Check if price data is available
+    if prices_df.empty or len(prices_df) < 30:
+        logger.warning("Insufficient price data for technical analysis")
+        # Return neutral signal with low confidence
+        message = HumanMessage(
+            content=json.dumps({
+                "signal": "neutral",
+                "confidence": "10%",
+                "reasoning": "Insufficient price data for technical analysis"
+            })
+        )
+        
+        state["messages"].append(message)
+        show_agent_reasoning({
+            "signal": "neutral",
+            "confidence": "10%", 
+            "reasoning": "Insufficient price data for technical analysis"
+        }, "Technical Analysis")
+        show_workflow_status("Technical Analyst", "completed")
+        return state
 
     # Initialize confidence variable
     confidence = 0.0

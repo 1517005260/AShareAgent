@@ -70,9 +70,9 @@ def portfolio_management_agent(state: AgentState):
         cleaned_messages_for_processing, "macro_analyst_agent")  # This is the main analysis path output
     # Add bull and bear researcher messages
     bull_researcher_message = get_latest_message_by_name(
-        cleaned_messages_for_processing, "researcher_bull_agent")
+        cleaned_messages_for_processing, "researcher_bull")
     bear_researcher_message = get_latest_message_by_name(
-        cleaned_messages_for_processing, "researcher_bear_agent")
+        cleaned_messages_for_processing, "researcher_bear")
 
     # Extract content, handling potential None if message not found by get_latest_message_by_name
     technical_content = technical_message.content if technical_message else json.dumps(
@@ -330,7 +330,7 @@ def portfolio_management_agent(state: AgentState):
             "raw_response_snippet": llm_response_content[:200] + "..."
         }
 
-    show_workflow_status(f"{agent_name}: --- Portfolio Manager Completed ---")
+    show_workflow_status(f"{agent_name}: --- Portfolio Manager Completed ---", "completed")
 
     # The portfolio_management_agent is a terminal or near-terminal node in terms of new message generation for the main state.
     # It should return its own decision, and an updated state["messages"] that includes its decision.
