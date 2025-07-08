@@ -222,8 +222,18 @@ def get_eastmoney_data(symbol: str, raw_response: bool = False) -> Optional[Dict
             
         if data.get('rc') == 0 and data.get('data'):
             stock_data = data['data']
-            return {
-                'current_price': safe_float(stock_data.get('f43', 0)) / 100,  # 现价
+            
+            # 处理价格：如果f43为0，可能是非交易时间，尝试从f162获取昨收价
+            current_price = safe_float(stock_data.get('f43', 0)) / 100
+            if current_price == 0:
+                # 尝试使用昨日收盘价作为参考价格
+                yesterday_close = safe_float(stock_data.get('f60', 0)) / 100
+                if yesterday_close > 0:
+                    current_price = yesterday_close
+                    logger.info(f"Using yesterday's closing price for {symbol}: {current_price}")
+            
+            result = {
+                'current_price': current_price,  # 现价
                 'market_cap': safe_float(stock_data.get('f116', 0)),  # 总市值 (corrected from f162 to f116)
                 'pe_ratio': safe_float(stock_data.get('f114', 0)),  # 市盈率动态 (corrected from f162 to f114)
                 'pe_ratio_static': safe_float(stock_data.get('f115', 0)),  # 市盈率静态
@@ -234,6 +244,13 @@ def get_eastmoney_data(symbol: str, raw_response: bool = False) -> Optional[Dict
                 'turnover': safe_float(stock_data.get('f48', 0)),  # 成交额
                 'change_pct': safe_float(stock_data.get('f170', 0)),  # 涨跌幅
             }
+            
+            # 如果价格仍然为0，标记为无效数据
+            if result['current_price'] == 0:
+                logger.warning(f"No valid price data from eastmoney for {symbol}")
+                return None
+                
+            return result
         else:
             logger.warning(f"No valid data from eastmoney for {symbol}")
             return None
@@ -920,7 +937,8 @@ def calculate_comprehensive_financial_metrics(symbol: str, financial_statements:
 
 def get_market_data(symbol: str) -> Dict[str, Any]:
     """获取市场数据，使用多数据源策略"""
-    data_sources = ['eastmoney', 'akshare', 'yfinance']
+    # 重新排序数据源优先级，akshare优先（因为在非交易时间仍能提供有效价格）
+    data_sources = ['akshare', 'eastmoney', 'yfinance']
     
     for source in data_sources:
         try:
@@ -933,11 +951,17 @@ def get_market_data(symbol: str) -> Dict[str, Any]:
             else:
                 continue
                 
-            if result and any(v is not None and v != 0 for v in result.values() if isinstance(v, (int, float))):
-                logger.info(f"✓ Successfully fetched market data from {source}")
-                return result
-            else:
-                logger.warning(f"Poor market data quality from {source}, trying next source")
+            # 检查结果质量，特别关注价格字段
+            if result:
+                current_price = result.get('current_price')
+                if current_price is not None and current_price > 0:
+                    logger.info(f"✓ Successfully fetched market data from {source} (price: {current_price})")
+                    return result
+                elif any(v is not None and v != 0 for v in result.values() if isinstance(v, (int, float))):
+                    logger.warning(f"Market data from {source} has no valid price but has other data")
+                    # 继续尝试下一个数据源以获取价格
+                else:
+                    logger.warning(f"Poor market data quality from {source}, trying next source")
                 
         except Exception as e:
             logger.error(f"Error with {source} market data source: {e}")

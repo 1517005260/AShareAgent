@@ -18,7 +18,7 @@ body {
 
 /* App Layout Styles */
 .app-header {
-  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+  background: linear-gradient(135deg, #1890ff 0%, #1677ff 100%);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   border-bottom: none;
 }
@@ -87,7 +87,7 @@ body {
 
 /* Button Styles */
 .primary-button {
-  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+  background: linear-gradient(135deg, #1890ff 0%, #1677ff 100%);
   border: none;
   border-radius: 8px;
   font-weight: 500;
@@ -97,7 +97,7 @@ body {
 }
 
 .primary-button:hover {
-  background: linear-gradient(135deg, #40a9ff 0%, #9254de 100%);
+  background: linear-gradient(135deg, #40a9ff 0%, #69b1ff 100%);
   box-shadow: 0 6px 16px rgba(24, 144, 255, 0.4);
   transform: translateY(-1px);
 }
@@ -151,11 +151,11 @@ body {
 }
 
 .app-menu .ant-menu-item:hover {
-  background: linear-gradient(135deg, #e6f7ff 0%, #f9f0ff 100%);
+  background: linear-gradient(135deg, #e6f7ff 0%, #f0f5ff 100%);
 }
 
 .app-menu .ant-menu-item-selected {
-  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+  background: linear-gradient(135deg, #1890ff 0%, #1677ff 100%);
   color: #fff;
 }
 
@@ -163,11 +163,11 @@ body {
   color: #fff;
 }
 
-/* Status Indicators */
+/* Status Indicators - A股配色：红涨绿跌 */
 .status-success {
-  color: #52c41a;
-  background: #f6ffed;
-  border: 1px solid #b7eb8f;
+  color: #ff4d4f;
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 12px;
@@ -185,9 +185,9 @@ body {
 }
 
 .status-error {
-  color: #ff4d4f;
-  background: #fff2f0;
-  border: 1px solid #ffccc7;
+  color: #52c41a;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 12px;

@@ -21,7 +21,7 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalysisStart }) => {
         start_date: values.start_date ? dayjs(values.start_date).format('YYYY-MM-DD') : undefined,
         end_date: values.end_date ? dayjs(values.end_date).format('YYYY-MM-DD') : undefined,
       };
-      
+
       const response = await ApiService.startAnalysis(formattedValues);
       if (response.success && response.data?.run_id) {
         message.success('分析任务已启动');
@@ -96,9 +96,9 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalysisStart }) => {
           name="start_date"
           tooltip="可选，不填则使用默认值（一年前）"
         >
-          <DatePicker 
-            style={{ width: '100%' }} 
-            placeholder="选择开始日期" 
+          <DatePicker
+            style={{ width: '100%' }}
+            placeholder="选择开始日期"
             format="YYYY-MM-DD"
           />
         </Form.Item>
@@ -108,9 +108,9 @@ const AnalysisForm: React.FC<AnalysisFormProps> = ({ onAnalysisStart }) => {
           name="end_date"
           tooltip="可选，不填则使用默认值（昨天）"
         >
-          <DatePicker 
-            style={{ width: '100%' }} 
-            placeholder="选择结束日期" 
+          <DatePicker
+            style={{ width: '100%' }}
+            placeholder="选择结束日期"
             format="YYYY-MM-DD"
           />
         </Form.Item>

@@ -123,8 +123,8 @@ const AgentManagement: React.FC = () => {
   const getTypeColor = (type: string) => {
     switch (type?.toLowerCase()) {
       case 'analysis': return 'blue';
-      case 'trading': return 'green';
-      case 'risk': return 'red';
+      case 'trading': return 'red';  // Red for trading (A-share convention)
+      case 'risk': return 'orange';  // Orange for risk (neutral color)
       default: return 'default';
     }
   };

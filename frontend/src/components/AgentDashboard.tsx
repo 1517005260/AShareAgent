@@ -128,10 +128,10 @@ const AgentDashboard: React.FC = () => {
   const getTypeColor = (type: string) => {
     switch (type?.toLowerCase()) {
       case 'analysis': return 'blue';
-      case 'trading': return 'green';
-      case 'risk': return 'red';
+      case 'trading': return 'red';  // Red for trading (A-share convention)
+      case 'risk': return 'orange';  // Orange for risk (neutral color)
       case 'sentiment': return 'purple';
-      case 'macro': return 'orange';
+      case 'macro': return 'cyan';
       default: return 'default';
     }
   };

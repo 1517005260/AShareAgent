@@ -30,10 +30,30 @@ async def get_stock_price(
     获取股票实时价格
     """
     try:
-        # 先尝试使用东方财富API
+        # 使用改进的市场数据API（已经包含了多数据源回退逻辑）
+        try:
+            data = get_market_data(ticker)
+            if data and data.get('current_price') and data['current_price'] > 0:
+                return {
+                    "success": True,
+                    "data": {
+                        "ticker": ticker,
+                        "current_price": data['current_price'],
+                        "change": data.get('change'),
+                        "change_percent": data.get('change_percent'),
+                        "volume": data.get('volume'),
+                        "market_cap": data.get('market_cap'),
+                        "updated_at": data.get('updated_at')
+                    },
+                    "message": "获取股票价格成功"
+                }
+        except Exception as e:
+            print(f"市场数据API失败: {str(e)}")
+        
+        # 如果市场数据API也失败，直接尝试东方财富API
         try:
             data = get_eastmoney_data(ticker)
-            if data and 'current_price' in data:
+            if data and data.get('current_price') and data['current_price'] > 0:
                 return {
                     "success": True,
                     "data": {
@@ -50,30 +70,11 @@ async def get_stock_price(
         except Exception as e:
             print(f"东方财富API失败: {str(e)}")
         
-        # 如果东方财富API失败，尝试使用市场数据API
-        try:
-            data = get_market_data(ticker)
-            if data and 'price' in data:
-                return {
-                    "success": True,
-                    "data": {
-                        "ticker": ticker,
-                        "current_price": data['price'],
-                        "change": data.get('change'),
-                        "change_percent": data.get('change_percent'),
-                        "volume": data.get('volume'),
-                        "updated_at": data.get('updated_at')
-                    },
-                    "message": "获取股票价格成功"
-                }
-        except Exception as e:
-            print(f"市场数据API失败: {str(e)}")
-        
         # 如果都失败了，返回错误
         return {
             "success": False,
             "message": f"无法获取股票 {ticker} 的价格数据",
-            "error": "所有数据源都不可用"
+            "error": "所有数据源都不可用或返回无效价格"
         }
         
     except Exception as e:

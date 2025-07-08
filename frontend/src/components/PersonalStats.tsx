@@ -80,8 +80,8 @@ const PersonalStats: React.FC = () => {
   };
 
   const getReturnColor = (value: number) => {
-    if (value > 0) return '#52c41a';
-    if (value < 0) return '#ff4d4f';
+    if (value > 0) return '#ff4d4f'; // A股红涨
+    if (value < 0) return '#52c41a'; // A股绿跌
     return '#d9d9d9';
   };
 

@@ -38,6 +38,15 @@ class SystemLogEntry(BaseModel):
     created_at: datetime
 
 
+class LogDisplayEntry(BaseModel):
+    """日志显示条目（简化版，用于前端显示）"""
+    id: int
+    level: str
+    message: str
+    timestamp: str
+    module: Optional[str] = None
+
+
 class SystemLogFilter(BaseModel):
     """系统日志过滤器"""
     user_id: Optional[int] = None

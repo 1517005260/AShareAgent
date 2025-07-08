@@ -56,8 +56,12 @@ async def create_portfolio(
         if len(existing_portfolios) >= max_portfolios:
             return ApiResponse(
                 success=False,
-                message=f"每个用户最多只能创建{max_portfolios}个投资组合",
-                data=None
+                message=f"您已达到投资组合数量上限（{len(existing_portfolios)}/{max_portfolios}个）。请先删除一些不需要的投资组合后再创建新的。",
+                data={
+                    "current_count": len(existing_portfolios),
+                    "max_allowed": max_portfolios,
+                    "exceeded": True
+                }
             )
         
         # 检查组合名称是否重复

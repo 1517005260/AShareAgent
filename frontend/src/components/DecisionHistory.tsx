@@ -126,8 +126,8 @@ const DecisionHistory: React.FC = () => {
 
   const getDecisionTypeColor = (type: string) => {
     switch (type?.toLowerCase()) {
-      case 'buy': return 'success';
-      case 'sell': return 'error';
+      case 'buy': return 'error';  // Red for buy (A-share convention)
+      case 'sell': return 'success';  // Green for sell (A-share convention)
       case 'hold': return 'warning';
       case 'analysis': return 'blue';
       default: return 'default';

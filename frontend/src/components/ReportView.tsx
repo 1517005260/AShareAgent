@@ -233,10 +233,10 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
     switch (signal?.toLowerCase()) {
       case 'bullish':
       case 'buy':
-        return <ArrowUpOutlined style={{ color: '#52c41a' }} />;
+        return <ArrowUpOutlined style={{ color: '#ff4d4f' }} />;  // Red for bullish/buy (A-share convention)
       case 'bearish':
       case 'sell':
-        return <ArrowDownOutlined style={{ color: '#ff4d4f' }} />;
+        return <ArrowDownOutlined style={{ color: '#52c41a' }} />;  // Green for bearish/sell (A-share convention)
       case 'neutral':
       case 'hold':
         return <MinusOutlined style={{ color: '#d9d9d9' }} />;
@@ -250,10 +250,10 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
     switch (signal?.toLowerCase()) {
       case 'bullish':
       case 'buy':
-        return 'success';
+        return 'error';  // Red for bullish/buy (A-share convention)
       case 'bearish':
       case 'sell':
-        return 'error';
+        return 'success';  // Green for bearish/sell (A-share convention)
       case 'neutral':
       case 'hold':
         return 'default';
@@ -518,7 +518,7 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={12}>
               <Text strong>观点: </Text>
-              <Tag color="green">
+              <Tag color="red">
                 <RiseOutlined /> {agent_results.researcher_bull.perspective?.toUpperCase() || agent_results.researcher_bull.signal?.toUpperCase() || 'BULL'}
               </Tag>
             </Col>
@@ -564,7 +564,7 @@ const ReportView: React.FC<ReportViewProps> = ({ data }) => {
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col span={12}>
               <Text strong>观点: </Text>
-              <Tag color="red">
+              <Tag color="green">
                 <FallOutlined /> {agent_results.researcher_bear.perspective?.toUpperCase() || agent_results.researcher_bear.signal?.toUpperCase() || 'BEAR'}
               </Tag>
             </Col>

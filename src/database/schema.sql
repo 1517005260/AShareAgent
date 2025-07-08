@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS user_portfolios (
     initial_capital REAL NOT NULL,            -- 初始资金
     current_value REAL,                       -- 当前价值
     cash_balance REAL,                        -- 现金余额
+    risk_level TEXT DEFAULT 'medium',         -- 风险等级 (low/medium/high)
     is_active BOOLEAN DEFAULT 1,              -- 是否激活
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

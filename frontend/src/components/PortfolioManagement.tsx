@@ -184,10 +184,27 @@ const PortfolioManagement: React.FC = () => {
         createForm.resetFields();
         await loadPortfolios();
       } else {
-        message.error(response.message || '创建失败');
+        // 检查是否是数量限制错误
+        if (response.data?.exceeded) {
+          message.error({
+            content: response.message || '创建失败',
+            duration: 6, // 显示更长时间
+          });
+        } else {
+          message.error(response.message || '创建失败');
+        }
       }
     } catch (err: any) {
-      message.error(err.response?.data?.message || '创建失败');
+      const errorMessage = err.response?.data?.message || '创建失败';
+      // 检查是否包含上限相关的错误信息
+      if (errorMessage.includes('上限') || errorMessage.includes('最多')) {
+        message.error({
+          content: errorMessage,
+          duration: 6, // 显示更长时间
+        });
+      } else {
+        message.error(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -255,10 +272,21 @@ const PortfolioManagement: React.FC = () => {
         }
       }
       
+      // 买入交易前检查现金余额
+      const totalAmount = values.quantity * finalPrice + (values.commission || 0);
+      if (values.transaction_type === 'buy') {
+        const currentCash = selectedPortfolio.cash_balance || 0;
+        if (totalAmount > currentCash) {
+          message.error(`现金余额不足！需要: ¥${totalAmount.toFixed(2)}, 当前余额: ¥${currentCash.toFixed(2)}`);
+          setLoading(false);
+          return;
+        }
+      }
+
       const response = await ApiService.addTransaction(selectedPortfolio.id, {
         ...values,
         price: finalPrice,
-        total_amount: values.quantity * finalPrice
+        total_amount: totalAmount
       });
 
       if (response.success) {
@@ -288,10 +316,20 @@ const PortfolioManagement: React.FC = () => {
     if (isNaN(value) || value === null || value === undefined) {
       return '¥0.00';
     }
-    return new Intl.NumberFormat('zh-CN', {
-      style: 'currency',
-      currency: 'CNY'
-    }).format(value);
+    
+    // 格式化大额数字
+    if (value >= 100000000) { // 1亿以上
+      return `¥${(value / 100000000).toFixed(2)}亿`;
+    } else if (value >= 10000) { // 1万以上
+      return `¥${(value / 10000).toFixed(2)}万`;
+    } else {
+      return new Intl.NumberFormat('zh-CN', {
+        style: 'currency',
+        currency: 'CNY',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(value);
+    }
   };
 
   const formatPercent = (value: number) => {
@@ -302,7 +340,7 @@ const PortfolioManagement: React.FC = () => {
   };
 
   const getReturnColor = (value: number) => {
-    return value >= 0 ? 'success' : 'error';
+    return value >= 0 ? 'error' : 'success'; // A股红涨绿跌
   };
 
   const holdingsColumns = [
@@ -378,7 +416,7 @@ const PortfolioManagement: React.FC = () => {
       dataIndex: 'transaction_type',
       key: 'transaction_type',
       render: (type: string) => (
-        <Tag color={type === 'buy' ? 'green' : 'red'}>
+        <Tag color={type === 'buy' ? 'red' : 'green'}>
           {type === 'buy' ? '买入' : '卖出'}
         </Tag>
       ),
@@ -411,7 +449,58 @@ const PortfolioManagement: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ 
+      padding: '24px',
+      background: '#f5f5f5',
+      minHeight: 'calc(100vh - 64px)'
+    }}>
+      {/* 页面标题 */}
+      <div style={{ 
+        marginBottom: '24px',
+        padding: '20px 0',
+        borderBottom: '1px solid #e8e8e8',
+        background: '#ffffff',
+        borderRadius: '8px 8px 0 0',
+        marginLeft: '-24px',
+        marginRight: '-24px',
+        marginTop: '-24px',
+        paddingLeft: '24px',
+        paddingRight: '24px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #1890ff 0%, #1677ff 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white'
+          }}>
+            <DollarOutlined style={{ fontSize: '16px' }} />
+          </div>
+          <div>
+            <h1 style={{ 
+              margin: 0, 
+              fontSize: '24px', 
+              fontWeight: '600',
+              color: '#262626'
+            }}>
+              投资组合管理
+            </h1>
+            <p style={{ 
+              margin: 0, 
+              fontSize: '14px', 
+              color: '#8c8c8c',
+              marginTop: '4px'
+            }}>
+              管理您的投资组合，跟踪投资表现
+            </p>
+          </div>
+        </div>
+      </div>
+
       {error && (
         <Alert
           message={error}
@@ -422,50 +511,151 @@ const PortfolioManagement: React.FC = () => {
         />
       )}
 
-      <Row gutter={16}>
+      <Row gutter={[24, 24]}>
         {/* 左侧组合列表 */}
         <Col span={6}>
           <Card
-            title="我的投资组合"
+            style={{
+              borderRadius: '12px',
+              border: '1px solid #e8e8e8',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
+            }}
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '16px', fontWeight: '600', color: '#262626' }}>
+                  我的投资组合
+                </span>
+                <span style={{ 
+                  fontSize: '12px', 
+                  color: portfolios.length >= 10 ? '#ff4d4f' : '#8c8c8c',
+                  fontWeight: '500',
+                  background: portfolios.length >= 10 ? '#fff2f0' : '#f6f6f6',
+                  padding: '2px 6px',
+                  borderRadius: '8px',
+                  border: portfolios.length >= 10 ? '1px solid #ffccc7' : '1px solid #e8e8e8'
+                }}>
+                  {portfolios.length}/10
+                </span>
+              </div>
+            }
             extra={
               <Button
                 type="primary"
+                size="small"
                 icon={<PlusOutlined />}
                 onClick={() => setCreateModalVisible(true)}
+                disabled={portfolios.length >= 10}
+                title={portfolios.length >= 10 ? '已达到投资组合数量上限' : '创建新的投资组合'}
+                style={{
+                  borderRadius: '6px',
+                  fontWeight: '500'
+                }}
               >
                 创建
               </Button>
             }
           >
+            {portfolios.length >= 10 && (
+              <Alert
+                message="投资组合数量已达上限"
+                description="您已创建了10个投资组合，这是当前允许的最大数量。如需创建新的投资组合，请先删除一些不需要的组合。"
+                type="warning"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+            )}
             {portfolios.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
                 暂无投资组合
               </div>
             ) : (
-              <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-                {portfolios.map((portfolio) => (
-                  <Card
-                    key={portfolio.id}
-                    size="small"
-                    hoverable
-                    onClick={() => setSelectedPortfolio(portfolio)}
-                    style={{
-                      marginBottom: 8,
-                      border: selectedPortfolio?.id === portfolio.id ? '2px solid #1890ff' : '1px solid #d9d9d9'
-                    }}
-                  >
-                    <div style={{ marginBottom: 8 }}>
-                      <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{portfolio.name}</div>
-                      <div style={{ color: '#666', fontSize: '12px' }}>{portfolio.description}</div>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span>当前价值: {formatCurrency(portfolio.current_value)}</span>
-                      <Tag color={portfolio.risk_level === 'high' ? 'red' : portfolio.risk_level === 'medium' ? 'orange' : 'green'}>
-                        {portfolio.risk_level === 'high' ? '高风险' : portfolio.risk_level === 'medium' ? '中风险' : '低风险'}
-                      </Tag>
-                    </div>
-                  </Card>
-                ))}
+              <div style={{ maxHeight: '650px', overflowY: 'auto', paddingRight: '4px' }}>
+                {portfolios.map((portfolio) => {
+                  const isSelected = selectedPortfolio?.id === portfolio.id;
+                  const returnRate = ((portfolio.current_value - portfolio.initial_capital) / portfolio.initial_capital) * 100;
+                  const isProfit = returnRate >= 0;
+                  
+                  return (
+                    <Card
+                      key={portfolio.id}
+                      hoverable
+                      onClick={() => setSelectedPortfolio(portfolio)}
+                      style={{
+                        marginBottom: 12,
+                        border: isSelected ? '2px solid #1890ff' : '1px solid #e8e8e8',
+                        borderRadius: '8px',
+                        background: isSelected ? '#f6ffed' : '#ffffff',
+                        boxShadow: isSelected 
+                          ? '0 4px 12px rgba(24, 144, 255, 0.15)' 
+                          : '0 2px 8px rgba(0, 0, 0, 0.06)',
+                        transition: 'all 0.3s ease',
+                        cursor: 'pointer'
+                      }}
+                      bodyStyle={{ padding: '16px' }}
+                    >
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ 
+                          fontWeight: '600', 
+                          fontSize: '15px', 
+                          color: '#262626',
+                          marginBottom: '4px',
+                          lineHeight: '1.4'
+                        }}>
+                          {portfolio.name}
+                        </div>
+                        <div style={{ 
+                          color: '#8c8c8c', 
+                          fontSize: '12px',
+                          lineHeight: '1.3'
+                        }}>
+                          {portfolio.description || '暂无描述'}
+                        </div>
+                      </div>
+                      
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ 
+                          fontSize: '16px', 
+                          fontWeight: 'bold',
+                          color: '#262626',
+                          marginBottom: '2px'
+                        }}>
+                          {formatCurrency(portfolio.current_value)}
+                        </div>
+                        <div style={{ 
+                          fontSize: '11px', 
+                          color: '#8c8c8c'
+                        }}>
+                          当前价值
+                        </div>
+                      </div>
+                      
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        marginTop: '12px'
+                      }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          color: isProfit ? '#ff4d4f' : '#52c41a'
+                        }}>
+                          {isProfit ? '+' : ''}{returnRate.toFixed(2)}%
+                        </div>
+                        <Tag 
+                          color={portfolio.risk_level === 'high' ? 'red' : portfolio.risk_level === 'medium' ? 'orange' : 'blue'}
+                          style={{ 
+                            fontSize: '11px',
+                            border: 'none',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          {portfolio.risk_level === 'high' ? '高风险' : portfolio.risk_level === 'medium' ? '中风险' : '低风险'}
+                        </Tag>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </Card>
@@ -477,16 +667,39 @@ const PortfolioManagement: React.FC = () => {
             <>
               {/* 组合概览卡片 */}
               <Card
-                style={{ marginBottom: 16 }}
+                style={{ 
+                  marginBottom: 24,
+                  background: 'linear-gradient(135deg, #f6f9fc 0%, #ffffff 100%)',
+                  border: '1px solid #e8f4f8'
+                }}
                 title={
-                  <Space>
-                    <TrophyOutlined />
-                    {selectedPortfolio.name}
-                  </Space>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #1890ff 0%, #1677ff 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white'
+                    }}>
+                      <TrophyOutlined style={{ fontSize: '18px' }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '18px', fontWeight: '600', color: '#262626' }}>
+                        {selectedPortfolio.name}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#8c8c8c', marginTop: '2px' }}>
+                        {selectedPortfolio.description || '暂无描述'}
+                      </div>
+                    </div>
+                  </div>
                 }
                 extra={
                   <Space>
                     <Button
+                      type="text"
                       icon={<EditOutlined />}
                       onClick={() => {
                         editForm.setFieldsValue({
@@ -500,6 +713,7 @@ const PortfolioManagement: React.FC = () => {
                       编辑
                     </Button>
                     <Button
+                      type="text"
                       danger
                       icon={<DeleteOutlined />}
                       onClick={() => {
@@ -515,42 +729,113 @@ const PortfolioManagement: React.FC = () => {
                   </Space>
                 }
               >
-                <Row gutter={16}>
+                <Row gutter={[24, 16]} style={{ marginTop: '8px' }}>
                   <Col span={6}>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#52c41a' }}>
+                    <Card
+                      size="small"
+                      style={{ 
+                        textAlign: 'center',
+                        border: '1px solid #e8f5ff',
+                        background: '#f0f9ff'
+                      }}
+                    >
+                      <div style={{ 
+                        fontSize: '28px', 
+                        fontWeight: 'bold', 
+                        color: '#1890ff',
+                        marginBottom: '4px'
+                      }}>
                         {formatCurrency(selectedPortfolio.current_value)}
                       </div>
-                      <div style={{ color: '#666' }}>当前价值</div>
-                    </div>
+                      <div style={{ 
+                        color: '#666', 
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}>
+                        当前价值
+                      </div>
+                    </Card>
                   </Col>
                   <Col span={6}>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1890ff' }}>
+                    <Card
+                      size="small"
+                      style={{ 
+                        textAlign: 'center',
+                        border: '1px solid #e6f7ff',
+                        background: '#f6ffed'
+                      }}
+                    >
+                      <div style={{ 
+                        fontSize: '28px', 
+                        fontWeight: 'bold', 
+                        color: '#52c41a',
+                        marginBottom: '4px'
+                      }}>
                         {formatCurrency(selectedPortfolio.initial_capital)}
                       </div>
-                      <div style={{ color: '#666' }}>初始资金</div>
-                    </div>
+                      <div style={{ 
+                        color: '#666', 
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}>
+                        初始资金
+                      </div>
+                    </Card>
                   </Col>
                   <Col span={6}>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#722ed1' }}>
+                    <Card
+                      size="small"
+                      style={{ 
+                        textAlign: 'center',
+                        border: '1px solid #f9f0ff',
+                        background: '#fafafa'
+                      }}
+                    >
+                      <div style={{ 
+                        fontSize: '28px', 
+                        fontWeight: 'bold', 
+                        color: '#722ed1',
+                        marginBottom: '4px'
+                      }}>
                         {formatCurrency(selectedPortfolio.cash_balance)}
                       </div>
-                      <div style={{ color: '#666' }}>现金余额</div>
-                    </div>
+                      <div style={{ 
+                        color: '#666', 
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}>
+                        现金余额
+                      </div>
+                    </Card>
                   </Col>
                   <Col span={6}>
-                    <div style={{ textAlign: 'center' }}>
+                    <Card
+                      size="small"
+                      style={{ 
+                        textAlign: 'center',
+                        border: selectedPortfolio.current_value >= selectedPortfolio.initial_capital 
+                          ? '1px solid #fff2f0' : '1px solid #f6ffed',
+                        background: selectedPortfolio.current_value >= selectedPortfolio.initial_capital 
+                          ? '#fff2f0' : '#f6ffed'
+                      }}
+                    >
                       <div style={{
-                        fontSize: '24px',
+                        fontSize: '28px',
                         fontWeight: 'bold',
-                        color: selectedPortfolio.current_value >= selectedPortfolio.initial_capital ? '#52c41a' : '#ff4d4f'
+                        color: selectedPortfolio.current_value >= selectedPortfolio.initial_capital 
+                          ? '#ff4d4f' : '#52c41a',
+                        marginBottom: '4px'
                       }}>
                         {formatPercent((selectedPortfolio.current_value - selectedPortfolio.initial_capital) / selectedPortfolio.initial_capital)}
                       </div>
-                      <div style={{ color: '#666' }}>总收益率</div>
-                    </div>
+                      <div style={{ 
+                        color: '#666', 
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}>
+                        总收益率
+                      </div>
+                    </Card>
                   </Col>
                 </Row>
               </Card>
@@ -857,22 +1142,57 @@ const PortfolioManagement: React.FC = () => {
           </Form.Item>
 
           <Form.Item
+            name="commission"
+            label="手续费"
+            initialValue={0}
+          >
+            <InputNumber 
+              min={0} 
+              step={0.01} 
+              style={{ width: '100%' }} 
+              placeholder="0.00"
+              formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+              parser={value => value!.replace(/¥\s?|(,*)/g, '') as any}
+            />
+          </Form.Item>
+
+          <Form.Item
             label="总金额"
-            dependencies={['quantity', 'price']}
+            dependencies={['quantity', 'price', 'commission', 'transaction_type']}
           >
             <Form.Item noStyle shouldUpdate>
               {({ getFieldValue }) => {
                 const quantity = getFieldValue('quantity') || 0;
                 const price = getFieldValue('price') || 0;
-                const total = quantity * price;
+                const transactionType = getFieldValue('transaction_type');
+                const commission = getFieldValue('commission') || 0;
+                const total = quantity * price + commission;
+                const currentCash = selectedPortfolio?.cash_balance || 0;
+                
+                // 检查买入时是否超出现金余额
+                const isInsufficientFunds = transactionType === 'buy' && total > currentCash;
+                
                 return (
-                  <InputNumber 
-                    value={total}
-                    disabled
-                    style={{ width: '100%' }}
-                    formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    parser={value => value!.replace(/¥\s?|(,*)/g, '') as any}
-                  />
+                  <div>
+                    <InputNumber 
+                      value={total}
+                      disabled
+                      style={{ 
+                        width: '100%',
+                        marginBottom: '8px'
+                      }}
+                      formatter={value => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      parser={value => value!.replace(/¥\s?|(,*)/g, '') as any}
+                    />
+                    <div style={{ fontSize: '12px', color: '#666' }}>
+                      可用现金: ¥{currentCash.toFixed(2)}
+                      {isInsufficientFunds && (
+                        <span style={{ color: '#ff4d4f', marginLeft: '8px' }}>
+                          ⚠️ 现金余额不足
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 );
               }}
             </Form.Item>

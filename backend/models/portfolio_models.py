@@ -12,6 +12,7 @@ class PortfolioBase(BaseModel):
     name: str
     description: Optional[str] = None
     initial_capital: float
+    risk_level: Optional[str] = 'medium'
     
     @validator('initial_capital')
     def validate_initial_capital(cls, v):
@@ -24,6 +25,12 @@ class PortfolioBase(BaseModel):
         if len(v.strip()) < 2:
             raise ValueError('组合名称长度不能少于2个字符')
         return v.strip()
+    
+    @validator('risk_level')
+    def validate_risk_level(cls, v):
+        if v is not None and v not in ['low', 'medium', 'high']:
+            raise ValueError('风险等级必须是low、medium或high')
+        return v
 
 
 class PortfolioCreate(PortfolioBase):
@@ -35,6 +42,7 @@ class PortfolioUpdate(BaseModel):
     """更新投资组合模型"""
     name: Optional[str] = None
     description: Optional[str] = None
+    risk_level: Optional[str] = None
     is_active: Optional[bool] = None
     
     @validator('name')
@@ -42,6 +50,12 @@ class PortfolioUpdate(BaseModel):
         if v is not None and len(v.strip()) < 2:
             raise ValueError('组合名称长度不能少于2个字符')
         return v.strip() if v else v
+    
+    @validator('risk_level')
+    def validate_risk_level(cls, v):
+        if v is not None and v not in ['low', 'medium', 'high']:
+            raise ValueError('风险等级必须是low、medium或high')
+        return v
 
 
 class PortfolioResponse(PortfolioBase):
@@ -173,8 +187,8 @@ class PortfolioService:
         
         query = """
         INSERT INTO user_portfolios (user_id, name, description, initial_capital, 
-                                   current_value, cash_balance, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                   current_value, cash_balance, risk_level, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         
         with self.db.get_connection() as conn:
@@ -186,6 +200,7 @@ class PortfolioService:
                 portfolio_data.initial_capital,
                 portfolio_data.initial_capital,  # 初始当前价值等于初始资金
                 portfolio_data.initial_capital,  # 初始现金余额等于初始资金
+                portfolio_data.risk_level or 'medium',  # 风险等级
                 now,
                 now
             ))
@@ -205,9 +220,15 @@ class PortfolioService:
         if result:
             portfolio_data = dict(result[0])
             # 计算收益率
-            if portfolio_data['current_value'] and portfolio_data['initial_capital']:
-                portfolio_data['total_return'] = portfolio_data['current_value'] - portfolio_data['initial_capital']
-                portfolio_data['return_rate'] = (portfolio_data['total_return'] / portfolio_data['initial_capital']) * 100
+            current_value = portfolio_data['current_value'] or 0
+            initial_capital = portfolio_data['initial_capital'] or 0
+            
+            if initial_capital > 0:
+                portfolio_data['total_return'] = current_value - initial_capital
+                portfolio_data['return_rate'] = (portfolio_data['total_return'] / initial_capital) * 100
+            else:
+                portfolio_data['total_return'] = 0
+                portfolio_data['return_rate'] = 0
             
             return PortfolioResponse(**portfolio_data)
         return None
@@ -225,9 +246,15 @@ class PortfolioService:
         for row in result:
             portfolio_data = dict(row)
             # 计算收益率
-            if portfolio_data['current_value'] and portfolio_data['initial_capital']:
-                portfolio_data['total_return'] = portfolio_data['current_value'] - portfolio_data['initial_capital']
-                portfolio_data['return_rate'] = (portfolio_data['total_return'] / portfolio_data['initial_capital']) * 100
+            current_value = portfolio_data['current_value'] or 0
+            initial_capital = portfolio_data['initial_capital'] or 0
+            
+            if initial_capital > 0:
+                portfolio_data['total_return'] = current_value - initial_capital
+                portfolio_data['return_rate'] = (portfolio_data['total_return'] / initial_capital) * 100
+            else:
+                portfolio_data['total_return'] = 0
+                portfolio_data['return_rate'] = 0
             
             portfolios.append(PortfolioResponse(**portfolio_data))
         
@@ -249,6 +276,10 @@ class PortfolioService:
         if update_data.description is not None:
             update_fields.append("description = ?")
             params.append(update_data.description)
+        
+        if update_data.risk_level is not None:
+            update_fields.append("risk_level = ?")
+            params.append(update_data.risk_level)
         
         if update_data.is_active is not None:
             update_fields.append("is_active = ?")
@@ -282,6 +313,13 @@ class PortfolioService:
             raise ValueError("投资组合不存在或无权限访问")
         
         total_amount = transaction.quantity * transaction.price + transaction.commission
+        
+        # 买入交易需要检查现金余额是否充足
+        if transaction.transaction_type == 'buy':
+            current_cash = portfolio.cash_balance or 0
+            if total_amount > current_cash:
+                raise ValueError(f"现金余额不足。需要：¥{total_amount:.2f}，当前余额：¥{current_cash:.2f}")
+        
         now = datetime.now()
         
         # 开始事务
@@ -323,6 +361,9 @@ class PortfolioService:
             """, (cash_change, now, portfolio_id))
             
             conn.commit()
+        
+        # 重新计算投资组合价值
+        self.recalculate_portfolio_value(user_id, portfolio_id)
         
         # 获取创建的交易记录
         return self.get_transaction_by_id(transaction_id)

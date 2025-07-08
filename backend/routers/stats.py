@@ -321,8 +321,8 @@ async def get_my_stats_summary(
         SELECT 
             COUNT(*) as total_portfolios,
             SUM(initial_capital) as total_capital,
-            SUM(COALESCE(current_value, initial_capital)) as total_value,
-            AVG(COALESCE(cash_balance, initial_capital)) as avg_cash_balance
+            SUM(current_value) as total_value,
+            AVG(cash_balance) as avg_cash_balance
         FROM user_portfolios
         WHERE user_id = ? AND is_active = 1
         """
@@ -359,8 +359,8 @@ async def get_my_stats_summary(
         
         # 获取最近的投资组合
         recent_portfolios_query = """
-        SELECT name, COALESCE(current_value, initial_capital) as current_value, 
-               ((COALESCE(current_value, initial_capital) - initial_capital) / initial_capital) as profit_loss_percent,
+        SELECT name, current_value, 
+               CASE WHEN initial_capital > 0 THEN ((current_value - initial_capital) / initial_capital) * 100 ELSE 0 END as profit_loss_percent,
                'medium' as risk_level
         FROM user_portfolios
         WHERE user_id = ? AND is_active = 1
@@ -373,9 +373,28 @@ async def get_my_stats_summary(
         # 计算成功率
         success_rate = (analysis_data.get('completed_tasks', 0) / analysis_data.get('total_tasks', 1)) if analysis_data.get('total_tasks', 0) > 0 else 0
         
-        # 计算最佳和最差收益率（基于历史回测或投资组合数据）
-        best_return = max(0.15, return_rate) if return_rate > 0 else 0.15  # 示例值
-        worst_return = min(-0.05, return_rate) if return_rate < 0 else -0.05  # 示例值
+        # 计算最佳和最差收益率（基于真实投资组合数据）
+        portfolio_returns_query = """
+        SELECT 
+            CASE WHEN initial_capital > 0 THEN ((current_value - initial_capital) / initial_capital) ELSE 0 END as return_rate
+        FROM user_portfolios
+        WHERE user_id = ? AND is_active = 1 AND initial_capital > 0
+        """
+        portfolio_returns_result = stats_service.db.execute_query(portfolio_returns_query, (current_user.id,))
+        
+        if portfolio_returns_result:
+            portfolio_returns = [row['return_rate'] for row in portfolio_returns_result]
+            if portfolio_returns:
+                best_return = max(portfolio_returns)
+                worst_return = min(portfolio_returns)
+            else:
+                # 如果没有投资组合数据，使用当前整体收益率作为基准
+                best_return = max(0, return_rate)
+                worst_return = min(0, return_rate)
+        else:
+            # 如果没有投资组合数据，使用当前整体收益率作为基准
+            best_return = max(0, return_rate)
+            worst_return = min(0, return_rate)
         
         # 构建符合前端期望的数据结构
         summary = {

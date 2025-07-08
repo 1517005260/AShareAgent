@@ -48,7 +48,7 @@ const BacktestResult: React.FC<BacktestResultProps> = ({ result }) => {
       dataIndex: 'action',
       key: 'action',
       render: (action: string) => (
-        <Text type={action === 'buy' ? 'success' : action === 'sell' ? 'danger' : undefined}>
+        <Text type={action === 'buy' ? 'danger' : action === 'sell' ? 'success' : undefined}>
           {action === 'buy' ? '买入' : action === 'sell' ? '卖出' : '持有'}
         </Text>
       ),
@@ -143,7 +143,7 @@ const BacktestResult: React.FC<BacktestResultProps> = ({ result }) => {
               title="总收益率"
               value={formatPercentage(performanceMetrics.total_return)}
               prefix={<RiseOutlined />}
-              valueStyle={{ color: (performanceMetrics.total_return || 0) >= 0 ? '#3f8600' : '#cf1322' }}
+              valueStyle={{ color: (performanceMetrics.total_return || 0) >= 0 ? '#cf1322' : '#3f8600' }}
             />
           </Col>
           <Col xs={24} sm={12} md={6}>
@@ -151,7 +151,7 @@ const BacktestResult: React.FC<BacktestResultProps> = ({ result }) => {
               title="年化收益率"
               value={formatPercentage(performanceMetrics.annualized_return)}
               prefix={<TrophyOutlined />}
-              valueStyle={{ color: (performanceMetrics.annualized_return || 0) >= 0 ? '#3f8600' : '#cf1322' }}
+              valueStyle={{ color: (performanceMetrics.annualized_return || 0) >= 0 ? '#cf1322' : '#3f8600' }}
             />
           </Col>
           <Col xs={24} sm={12} md={6}>
@@ -166,7 +166,7 @@ const BacktestResult: React.FC<BacktestResultProps> = ({ result }) => {
               title="最大回撤"
               value={formatPercentage(performanceMetrics.max_drawdown)}
               prefix={<FallOutlined />}
-              valueStyle={{ color: '#cf1322' }}
+              valueStyle={{ color: '#3f8600' }}
             />
           </Col>
         </Row>

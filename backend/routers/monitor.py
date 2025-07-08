@@ -9,7 +9,7 @@ from backend.models.api_models import ApiResponse
 from backend.models.auth_models import UserInDB
 from backend.models.monitor_models import (
     MonitorService, SystemLogEntry, SystemLogFilter, HealthCheck,
-    SystemMetrics, LogLevel
+    SystemMetrics, LogLevel, LogDisplayEntry
 )
 from backend.services.auth_service import get_current_active_user, require_permission, require_admin
 from backend.dependencies import get_database_manager
@@ -150,7 +150,7 @@ async def get_system_metrics(
         )
 
 
-@router.get("/logs", response_model=ApiResponse[List[SystemLogEntry]])
+@router.get("/logs", response_model=ApiResponse[List[LogDisplayEntry]])
 async def get_system_logs(
     user_id: Optional[int] = Query(None, description="用户ID过滤"),
     action: Optional[str] = Query(None, description="操作类型过滤"),
